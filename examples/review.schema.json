@@ -1,0 +1,16 @@
+{
+  "type": "object",
+  "properties": {
+    "sentiment": {"type": "string", "enum": ["positiv", "neutral", "negativ"]},
+    "verified": {"type": "boolean"},
+    "tags": {"type": "array", "items": {"type": "string"}},
+    "details": {
+      "type": "object",
+      "properties": {"score": {"type": "integer"}},
+      "required": ["score"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["sentiment", "verified", "tags", "details"],
+  "additionalProperties": false
+}

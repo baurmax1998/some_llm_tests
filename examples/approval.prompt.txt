@@ -1,0 +1,5 @@
+Triff anhand des Kontexts eine Ja/Nein-Entscheidung.
+
+Kontext: Der Antrag enthält alle Pflichtangaben, die Identität wurde geprüft und sämtliche Freigabebedingungen sind erfüllt.
+
+Setze approved auf true und gib ausschließlich das kurze JSON-Dokument zurück.
