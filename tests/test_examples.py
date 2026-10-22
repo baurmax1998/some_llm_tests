@@ -6,14 +6,11 @@ from enum import Enum
 import pytest
 from pydantic import BaseModel, ConfigDict
 
-from json_schema_playground.generation import generate
-from json_schema_playground.model_backend import DEFAULT_MODEL, MLXModelBackend
-from json_schema_playground.value_analysis import (
+from src.llm import DEFAULT_MODEL, MLXModelBackend, generate
+from src.mask import OutlinesSchemaConstraint
+from src.typed import (
     analyze_value_probabilities,
     format_value_probabilities,
-)
-from json_schema_playground.schema_engine import (
-    OutlinesSchemaConstraint,
     schema_from_pydantic,
 )
 

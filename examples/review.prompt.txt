@@ -1,5 +1,0 @@
-Extrahiere aus dem folgenden Kontext eine strukturierte Bewertung.
-
-Kontext: Eine verifizierte Käuferin schreibt: „Das Produkt gefällt mir sehr und funktioniert ausgezeichnet.“ Sie vergibt 5 Punkte. Verwende als Tags ausschließlich „produkt“ und „positiv“.
-
-Gib ein möglichst kurzes JSON-Dokument zurück. sentiment soll „positiv“, verified soll true und details.score soll 5 sein.

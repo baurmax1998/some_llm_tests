@@ -16,7 +16,7 @@ dependencies = [
 dev = ["pytest==8.4.2"]
 
 [project.scripts]
-json-schema-playground = "json_schema_playground.cli:main"
+json-schema-playground = "src.cli:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
