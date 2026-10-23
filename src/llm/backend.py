@@ -4,6 +4,7 @@ from typing import Any
 import numpy as np
 
 DEFAULT_MODEL = "mlx-community/Qwen3-8B-4bit"
+DEFAULT_SYSTEM_PROMPT = "Antworte ausschließlich mit dem verlangten JSON-Dokument."
 
 
 class MLXModelBackend:
@@ -21,12 +22,12 @@ class MLXModelBackend:
         self._prompt_ids: list[int] | None = None
         self._started = False
 
-    def prepare_prompt(self, user_prompt: str) -> None:
+    def prepare_prompt(self, user_prompt: str, system_prompt: str | None = None) -> None:
         # A backend instance can run several independent requests. Never carry
         # generated KV state from one schema/example into the next.
         self.cache = self._make_prompt_cache(self.model)
         messages = [
-            {"role": "system", "content": "Antworte ausschließlich mit dem verlangten JSON-Dokument."},
+            {"role": "system", "content": system_prompt or DEFAULT_SYSTEM_PROMPT},
             {"role": "user", "content": user_prompt},
         ]
         try:

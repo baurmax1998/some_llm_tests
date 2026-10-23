@@ -10,7 +10,7 @@ from ..typed.validation import validate_output
 def generate(
     backend: Any,
     constraint: Any,
-    schema: dict,
+    schema: dict | None,
     prompt: str,
     temperature: float = 0.7,
     top_p: float = 0.9,
@@ -18,6 +18,8 @@ def generate(
     max_new_tokens: int = 256,
     on_step: Callable[[GenerationTrace], None] | None = None,
     should_cancel: Callable[[], bool] | None = None,
+    output_validator: Callable[[str], Any] | None = None,
+    system_prompt: str | None = None,
 ) -> GenerationTrace:
     if max_new_tokens <= 0:
         raise ValueError("max_new_tokens muss positiv sein")
@@ -25,7 +27,10 @@ def generate(
     rng = np.random.default_rng(seed)
     generated_ids: list[int] = []
     previous = None
-    backend.prepare_prompt(prompt)
+    if system_prompt is None:
+        backend.prepare_prompt(prompt)
+    else:
+        backend.prepare_prompt(prompt, system_prompt=system_prompt)
 
     try:
         for step in range(max_new_tokens):
@@ -44,7 +49,10 @@ def generate(
             token = result.token_id
             constraint.accept_token(token)
             generated_ids.append(token)
-            text = backend.decode(generated_ids)
+            decoded = backend.decode(generated_ids)
+            # Textbasierte Constraints können Abschluss-Tokens wie EOS intern
+            # konsumieren, ohne sie zum eigentlichen Ergebnis zu zählen.
+            text = getattr(constraint, "source", decoded)
             trace.text = text
             trace.steps.append(StepTrace(
                 step=step, selected_token_id=token, selected_token=backend.token_repr(token),
@@ -60,8 +68,14 @@ def generate(
             if on_step:
                 on_step(trace)
             if constraint.is_complete():
-                value = validate_output(text, schema)
-                trace.validation = {"json": True, "jsonschema": True, "value": value}
+                if output_validator is not None:
+                    value = output_validator(text)
+                    trace.validation = {"custom": True, "value": value}
+                elif schema is not None:
+                    value = validate_output(text, schema)
+                    trace.validation = {"json": True, "jsonschema": True, "value": value}
+                else:
+                    trace.validation = {"value": text}
                 trace.status = "abgeschlossen"
                 return trace
             previous = token

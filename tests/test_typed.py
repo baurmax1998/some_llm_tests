@@ -1,12 +1,11 @@
 """Echte lokale End-to-End-Läufe mit aus Pydantic abgeleiteten Schemata."""
 import json
-import os
 from enum import Enum
 
 import pytest
 from pydantic import BaseModel, ConfigDict
 
-from src.llm import DEFAULT_MODEL, MLXModelBackend, generate
+from src.llm import generate
 from src.mask import OutlinesSchemaConstraint
 from src.typed import (
     analyze_value_probabilities,
@@ -61,6 +60,7 @@ class Categorization(StrictModel):
 CATEGORY_PROMPT = """Ordne den folgenden Kontext genau einer erlaubten Kategorie zu.
 
 Kontext: Apple hat einen neuen Prozessor für seine Mac-Computer vorgestellt, mit dem lassen sich sport Werte besser berechnen.
+ich freue mich darauf dann meine sport werte zu berechnen
 """
 
 
@@ -75,12 +75,6 @@ sämtliche Freigabebedingungen sind erfüllt.
 
 Setze approved auf true und gib ausschließlich das kurze JSON-Dokument zurück.
 """
-
-
-@pytest.fixture(scope="module")
-def backend():
-    """Das große Modell nur einmal laden; der KV-Cache wird pro Lauf erneuert."""
-    return MLXModelBackend(os.getenv("TEST_MODEL_ID", DEFAULT_MODEL))
 
 
 def run_local_example(

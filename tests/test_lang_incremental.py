@@ -19,7 +19,8 @@ from src.lang import LangPrefixState, LangSyntaxError, PrefixStatus, check_prefi
     ],
 )
 def test_valid_incomplete_prefixes(source):
-    assert check_prefix(source).status is PrefixStatus.INCOMPLETE
+    prefix = check_prefix(source)
+    assert prefix.status is PrefixStatus.INCOMPLETE
 
 
 def test_complete_program_is_recognized():
