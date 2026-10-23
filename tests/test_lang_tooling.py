@@ -80,14 +80,14 @@ def test_type_error_contains_source_diagnostic():
     source = 'goal result: Int = "falsch"'
     with pytest.raises(LangTypeError) as caught:
         compile_program(source)
-    diagnostic = caught.value.diagnostic(source, "example.lang")
-    assert "example.lang:1:" in diagnostic
+    diagnostic = caught.value.diagnostic(source, "example.sic")
+    assert "example.sic:1:" in diagnostic
     assert "^" in diagnostic
     assert 'goal result: Int = "falsch"' in diagnostic
 
 
 def test_cli_check_and_run(tmp_path, capsys):
-    program = tmp_path / "answer.lang"
+    program = tmp_path / "answer.sic"
     program.write_text("goal answer: Int = 6 * 7\n", encoding="utf-8")
 
     assert main(["check", str(program)]) == 0
@@ -97,7 +97,7 @@ def test_cli_check_and_run(tmp_path, capsys):
 
 
 def test_cli_prints_located_error(tmp_path, capsys):
-    program = tmp_path / "broken.lang"
+    program = tmp_path / "broken.sic"
     program.write_text('goal answer: Int = "nein"\n', encoding="utf-8")
     assert main(["check", str(program)]) == 1
     error = capsys.readouterr().err

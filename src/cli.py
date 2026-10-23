@@ -27,6 +27,8 @@ def _print_value(value: Any) -> None:
 
 def _source(path: str) -> tuple[Path, str]:
     file = Path(path)
+    if file.suffix != ".sic":
+        raise ValueError("SIC-Quelldateien benötigen die Endung .sic")
     return file, file.read_text(encoding="utf-8")
 
 
@@ -74,7 +76,10 @@ def command_generate(args: argparse.Namespace) -> int:
         print(trace.error or trace.text, file=sys.stderr)
         return 1
     if args.output:
-        Path(args.output).write_text(trace.text + "\n", encoding="utf-8")
+        output = Path(args.output)
+        if output.suffix != ".sic":
+            raise ValueError("Ausgabedateien benötigen die Endung .sic")
+        output.write_text(trace.text + "\n", encoding="utf-8")
     else:
         print(trace.text)
     return 0
@@ -82,7 +87,7 @@ def command_generate(args: argparse.Namespace) -> int:
 
 def command_repl(args: argparse.Namespace) -> int:
     registry = standard_registry(Path.cwd())
-    print("Lang REPL – Programm eingeben, mit leerer Zeile ausführen, :quit beendet.")
+    print("SIC REPL – Programm eingeben, mit leerer Zeile ausführen, :quit beendet.")
     lines: list[str] = []
     while True:
         try:
@@ -106,7 +111,7 @@ def command_repl(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="lang", description="Zielorientierte Programmiersprache")
+    parser = argparse.ArgumentParser(prog="sic", description="Zielorientierte Programmiersprache")
     commands = parser.add_subparsers(dest="command", required=True)
 
     check_parser = commands.add_parser("check", help="Programm statisch prüfen")

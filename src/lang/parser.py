@@ -1,4 +1,4 @@
-"""Parser für die in ``konzept.md`` beschriebene Ausdruckssprache."""
+"""Parser für die in ``doc/lang/konzept.md`` beschriebene Ausdruckssprache."""
 from __future__ import annotations
 from dataclasses import replace
 
