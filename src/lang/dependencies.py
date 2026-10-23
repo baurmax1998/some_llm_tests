@@ -26,6 +26,8 @@ def expression_names(expression: ast.Expr, local: frozenset[str] = frozenset()) 
             expression_names(expression.value, local)
             | expression_names(expression.body, local | {expression.name})
         )
+    if isinstance(expression, ast.OutputAccess):
+        return expression_names(expression.captured.call, local)
     if isinstance(expression, ast.MatchExpr):
         result = expression_names(expression.value, local)
         for case in expression.cases:
@@ -45,6 +47,8 @@ def expression_names(expression: ast.Expr, local: frozenset[str] = frozenset()) 
 def _names_in_value(value: object, local: frozenset[str]) -> set[str]:
     if isinstance(value, ast.Expr):
         return expression_names(value, local)
+    if isinstance(value, ast.NamedArgument):
+        return expression_names(value.value, local)
     if isinstance(value, tuple):
         result: set[str] = set()
         for item in value:
@@ -66,16 +70,29 @@ def check_definition_order(program: ast.Program) -> None:
         raise error
 
     required = expression_names(program.bindings[0].value)
-    for binding in program.bindings[1:]:
-        if binding.name not in required:
+    index = 1
+    while index < len(program.bindings):
+        binding = program.bindings[index]
+        group = [binding]
+        if isinstance(binding.value, ast.OutputAccess):
+            captured = binding.value.captured
+            while (
+                index + len(group) < len(program.bindings)
+                and isinstance(program.bindings[index + len(group)].value, ast.OutputAccess)
+                and program.bindings[index + len(group)].value.captured is captured
+            ):
+                group.append(program.bindings[index + len(group)])
+        if not any(item.name in required for item in group):
             error = LangDefinitionOrderError(
                 f"{binding.name!r} wird definiert, bevor der Name benötigt wird"
             )
             if binding.span is not None:
                 error.attach(binding.span.start, binding.span.end)
             raise error
-        required.discard(binding.name)
+        for item in group:
+            required.discard(item.name)
         required.update(expression_names(binding.value))
+        index += len(group)
 
 
 def dependency_graph(program: ast.Program) -> dict[str, set[str]]:

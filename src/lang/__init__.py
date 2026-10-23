@@ -7,7 +7,7 @@ from .dependencies import (
     check_dependency_cycles, dependency_graph,
 )
 from .errors import (
-    LangError, LangIncompleteError, LangNameError, LangRuntimeError,
+    LangCalculationError, LangError, LangIncompleteError, LangNameError, LangRuntimeError,
     LangSyntaxError, LangTypeError,
 )
 from .incremental import LangPrefixState, PrefixCheck, PrefixStatus, check_prefix
@@ -28,17 +28,20 @@ def compile_program(source: str, registry: ModuleRegistry | None = None) -> Chec
     return check(parse(source), active_registry)
 
 
-def run(source: str, registry: ModuleRegistry | None = None) -> ExecutionResult:
-    """Quelltext prüfen und anschließend sein Ziel auswerten."""
+def run(
+    source: str, registry: ModuleRegistry | None = None,
+    arguments: dict[str, object] | None = None,
+) -> ExecutionResult:
+    """Quelltext prüfen und anschließend sein Ziel mit optionalen Eingaben auswerten."""
     active_registry = registry if registry is not None else standard_registry()
     checked = compile_program(source, active_registry)
-    return execute(checked, active_registry)
+    return execute(checked, active_registry, arguments)
 
 
 __all__ = [
     "BOOL", "FLOAT", "INT", "NULL", "STRING", "CheckedProgram", "Evaluator", "ExecutionResult",
     "ExternalFunction", "FunctionType", "LangDefinitionOrderError",
-    "LangDependencyError", "LangError",
+    "LangDependencyError", "LangCalculationError", "LangError",
     "LangIncompleteError", "LangConstraint", "LangNameError", "LangPrefixState",
     "IncrementalCompiler", "SemanticSnapshot",
     "LangRuntimeError", "LangSyntaxError",

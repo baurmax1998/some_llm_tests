@@ -301,30 +301,26 @@ Bei Mehrdeutigkeit dürfen Typanforderungen nur verwendet werden, wenn sie für 
 
 Das Auflösen einer Referenz führt keinen Anwendungscode aus. Effekte entstehen erst durch die spätere Ausführung des Aufrufs.
 
-### 8. Eigene Funktionen
+### 8. Aufrufbare Berechnungen
 
-Die erste Verwendung einer unbekannten Funktion legt ihre Signatur fest. Eine mögliche Schreibweise ist:
-
-```text
-goal total: Int =
-    calculate_total(
-        orders: List<Order>
-    ): Int
-```
-
-Die Implementierung folgt als Funktionswert:
+Jedes `goal` und jedes `let` benennt eine aufrufbare Berechnung. Freie Namen bilden ihre Eingaben. Ein lokal definierter Zwischenwert kann beim Aufruf überschrieben werden; dann werden seine eigenen Voraussetzungen weder verlangt noch ausgewertet.
 
 ```text
-let calculate_total = (items) =>
-    items
-        .filter(item => not item.paid)
-        .map(item => (item.amount: Int))
-        .sum()
+goal ergebnis: Int = a + b
+let b = c * d
 ```
 
-Die Typen der Parameter ergeben sich aus der zuvor festgelegten Signatur. Die Implementierung muss den vereinbarten Rückgabetyp liefern.
+Mögliche Aufrufe sind:
 
-Das Schlüsselwort `define` wird nicht benötigt.
+```text
+ergebnis(a: 10, b: 5)
+ergebnis(a: 10, c: 2, d: 3)
+b(c: 2, d: 3)
+```
+
+Für `ergebnis` gilt damit die Voraussetzung `a und (b oder (c und d))`. Argumente sind benannt. Typen werden aus der Verwendung in der Berechnung und aus den Argumenten inferiert. Lambdas bleiben für lokale Transformationen wie `map` verfügbar, sind aber nicht mehr erforderlich, um eine Top-Level-Berechnung zu definieren.
+
+Die Voraussetzungen aller Zweige eines `if` müssen statisch versorgt sein. Zur Laufzeit wird weiterhin nur der gewählte Zweig ausgeführt.
 
 ### 9. Vollständiges Beispiel
 
@@ -389,3 +385,72 @@ Die Verarbeitung erfolgt in drei Phasen:
 3. **Ausführung:** Werte entsprechend ihren Abhängigkeiten berechnen und externe Daten zur Laufzeit validieren.
 
 Typkorrektheit garantiert weder vorhandene Dateien noch fachlich richtige Ergebnisse. Diese Prüfungen gehören zur Laufzeit beziehungsweise zu Tests.
+
+## Aufrufbare Module
+
+Ein Herkunftspfad kann außer einer externen Host-Funktion auch ein `goal` oder `let` aus einer anderen Sprachdatei bezeichnen:
+
+```text
+goal gesamt: Float =
+    rechnungsbetrag::preise::shop(
+        grundpreis: 100.0,
+        punkte: 20.0,
+        divisor: 2.0
+    )
+```
+
+Das Modulregister hält dafür nicht nur eine flache Funktionssignatur, sondern Ergebnistypen, Eingabetypen, den Abhängigkeitsgraphen, überschreibbare Zwischenwerte und Fehlerausgänge. Sowohl das Goal als auch seine Lets sind exportierbar. Das Auflösen des Pfads führt keinen Anwendungscode aus.
+
+In der Python-Integration registriert `ModuleRegistry.register_source(modul, paket, quelltext)` eine Sprachdatei. Die Zuordnung realer Dateien zu Modul- und Paketnamen bleibt Aufgabe des Projekts.
+
+## Benannte Fehler
+
+`err` beendet nur den tatsächlich ausgewerteten Berechnungsweg. Der optionale Ausdruck hinter `=` ist der Nutzwert des Fehlers:
+
+```text
+err divideByZeroError
+err divideByZeroError = "Der Divisor darf nicht null sein"
+```
+
+Ein einfacher Aufruf propagiert einen Fehler automatisch. Es gibt keine `Ok`-Wrapper und kein erforderliches `?`. Wird die Berechnung, in der die Fehlerstelle liegt, durch ein Argument überschrieben oder liegt sie in einem nicht gewählten Zweig, entsteht der Fehler nicht.
+
+Fehleridentitäten enthalten intern ihre Modulherkunft. Gleichnamige Fehler verschiedener Module werden daher nicht vereinigt. Kann ein Name bei der Entnahme mehrere Identitäten bezeichnen, lehnt die Typprüfung ihn als mehrdeutig ab.
+
+## Mehrfachbindung und Fehlerbehandlung
+
+Ergebnis, Zwischenwerte und Fehler können namensbasiert aus genau einem Aufruf entnommen werden:
+
+```text
+rechnungsbetrag, rabatt, divideByZeroError =
+    rechnungsbetrag::preise::shop(
+        grundpreis: 100.0,
+        punkte: 20.0,
+        divisor: 0.0
+    )
+```
+
+Die Mehrfachbindung ist keine veränderliche Zuweisung. Sie steht wie ein `let` nach der ersten Verwendung ihrer Ausgänge. Nur ausdrücklich aufgeführte Fehler werden abgefangen; alle anderen propagieren weiter.
+
+Für die erste Version wird die bislang offene Präsenzsyntax durch Nullable-Werte konkretisiert:
+
+- normale Ergebnis- und Zwischenausgänge haben beim Abfangen eines Fehlers den Typ `T?`;
+- ein Fehler mit Nutzwert hat den Typ `T?`;
+- ein Fehler ohne Nutzwert hat den Typ `Bool?`: `true` bedeutet vorhanden, `null` bedeutet nicht vorhanden;
+- `!= null`, `if`, `match` und `??` dienen als vorhandene Präsenzprüfung und Typverengung;
+- Umbenennung bei der Mehrfachbindung wird zunächst nicht unterstützt.
+
+Damit ist eine ungeprüfte Verwendung eines möglicherweise fehlenden Ergebnisses ein Typfehler. Der folgende Ausdruck ist unzulässig, solange `rechnungsbetrag: Float?` gilt:
+
+```text
+rechnungsbetrag + 1.0
+```
+
+Eine zulässige Behandlung ist beispielsweise:
+
+```text
+if divideByZeroError != null
+then divideByZeroError
+else "ok"
+```
+
+Wenn mehrere unabhängige Auswertungen scheitern könnten, bestimmt die normale, reproduzierbare Auswertungsreihenfolge des Ausdrucks den zuerst propagierten Fehler. Nicht gewählte Zweige und durch Overrides abgeschnittene Abhängigkeiten werden nicht ausgewertet.

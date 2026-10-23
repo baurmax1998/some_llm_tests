@@ -91,9 +91,34 @@ class Lambda(Expr):
 
 
 @dataclass(frozen=True)
+class NamedArgument:
+    name: str
+    value: Expr
+
+
+@dataclass(frozen=True)
 class Call(Expr):
     function: Expr
-    arguments: tuple[Expr, ...]
+    arguments: tuple[Expr | NamedArgument, ...]
+
+
+@dataclass(frozen=True)
+class ErrorExpr(Expr):
+    name: str
+    payload: Expr | None = None
+
+
+@dataclass(frozen=True)
+class CapturedCall:
+    """Ein einmal auszuwertender Aufruf hinter einer Mehrfachbindung."""
+    call: Call
+    outputs: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class OutputAccess(Expr):
+    captured: CapturedCall
+    name: str
 
 
 @dataclass(frozen=True)

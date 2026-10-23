@@ -50,3 +50,13 @@ class LangNameError(LangError):
 
 class LangRuntimeError(LangError):
     pass
+
+
+class LangCalculationError(LangRuntimeError):
+    """Ein nicht abgefangener, mit ``err`` ausgelöster Fehlerausgang."""
+
+    def __init__(self, name: str, payload=None, identity: tuple[str, ...] = ()):
+        self.name = name
+        self.payload = payload
+        self.identity = identity or (name,)
+        super().__init__(f"Berechnung endete mit Fehler {name!r}")

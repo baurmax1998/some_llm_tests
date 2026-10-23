@@ -5,7 +5,7 @@ from functools import reduce
 from typing import Any, Callable
 from . import ast
 from .checker import CheckedProgram
-from .errors import LangRuntimeError
+from .errors import LangCalculationError, LangRuntimeError
 from .registry import ModuleRegistry
 from .types import (
     FunctionType, ListType, MapType, NullableType, Primitive, RecordType, Type,
@@ -20,23 +20,42 @@ class ExecutionResult:
 
 
 class Evaluator:
-    def __init__(self, checked: CheckedProgram, registry: ModuleRegistry | None = None):
+    def __init__(
+        self, checked: CheckedProgram, registry: ModuleRegistry | None = None,
+        overrides: dict[str, Any] | None = None,
+        identity_origin: tuple[str, ...] = (),
+    ):
         self.checked = checked
         self.registry = registry or ModuleRegistry()
         self.definitions = {binding.name: binding.value for binding in checked.program.bindings}
         self.values: dict[str, Any] = {}
         self.active: set[str] = set()
+        self.overrides = dict(overrides or {})
+        self.identity_origin = identity_origin
+        self.captured_values: dict[int, dict[str, Any]] = {}
 
     def run(self) -> ExecutionResult:
         goal = self.checked.program.goal.name
         return ExecutionResult(goal, self.resolve(goal))
 
+    def call(self, name: str, **arguments: Any) -> Any:
+        """Ruft ein Goal oder Let von Python aus mit denselben Override-Regeln auf."""
+        nested = Evaluator(self.checked, self.registry, arguments, self.identity_origin)
+        return nested.resolve(name)
+
     def resolve(self, name: str) -> Any:
+        if name in self.overrides:
+            expected = self.checked.bindings.get(name, self.checked.inputs.get(name))
+            if expected is not None:
+                validate_runtime_value(self.overrides[name], expected, name)
+            return self.overrides[name]
         if name in self.values:
             return self.values[name]
         if name in self.active:
             raise LangRuntimeError(f"Unzulässiger Abhängigkeitszyklus bei {name!r}")
         if name not in self.definitions:
+            if name in self.checked.inputs:
+                raise LangRuntimeError(f"Erforderliche Eingabe {name!r} wurde nicht übergeben")
             raise LangRuntimeError(f"Name {name!r} besitzt keine Definition")
         self.active.add(name)
         try:
@@ -54,6 +73,15 @@ class Evaluator:
                 return self.registry.resolve(expression.name, expression.origin).implementation
             return local[expression.name] if expression.name in local else self.resolve(expression.name)
         if isinstance(expression, ast.Annotation): return self.evaluate(expression.value, local)
+        if isinstance(expression, ast.ErrorExpr):
+            payload = self.evaluate(expression.payload, local) if expression.payload is not None else None
+            identity = (*self.identity_origin, expression.name) if self.identity_origin else (expression.name,)
+            raise LangCalculationError(expression.name, payload, identity)
+        if isinstance(expression, ast.OutputAccess):
+            key = id(expression.captured)
+            if key not in self.captured_values:
+                self.captured_values[key] = self.evaluate_capture(expression.captured, local)
+            return self.captured_values[key][expression.name]
         if isinstance(expression, ast.ListExpr):
             return [self.evaluate(item, local) for item in expression.items]
         if isinstance(expression, ast.MapExpr):
@@ -137,6 +165,14 @@ class Evaluator:
                 return self.evaluate(expression.body, {**captured, **dict(zip(expression.parameters, arguments))})
             return function
         if isinstance(expression, ast.Call):
+            spec = self.checked.call_specs.get(id(expression))
+            if spec is not None:
+                arguments = {
+                    argument.name: self.evaluate(argument.value, local)
+                    for argument in expression.arguments
+                    if isinstance(argument, ast.NamedArgument)
+                }
+                return self.invoke_calculation(spec, arguments).resolve(spec.symbol)
             function = self.evaluate(expression.function, local)
             return function(*(self.evaluate(argument, local) for argument in expression.arguments))
         if isinstance(expression, ast.SafeMethodCall):
@@ -151,6 +187,39 @@ class Evaluator:
             arguments = [self.evaluate(argument, local) for argument in expression.arguments]
             return self.evaluate_method(values, expression.name, arguments)
         raise AssertionError(type(expression))  # pragma: no cover
+
+    def invoke_calculation(self, spec, arguments: dict[str, Any]) -> "Evaluator":
+        checked = spec.checked or self.checked
+        return Evaluator(checked, self.registry, arguments, spec.origin)
+
+    def evaluate_capture(self, captured: ast.CapturedCall, local: dict[str, Any]) -> dict[str, Any]:
+        info = self.checked.captures[id(captured)]
+        arguments = {
+            argument.name: self.evaluate(argument.value, local)
+            for argument in captured.call.arguments
+            if isinstance(argument, ast.NamedArgument)
+        }
+        evaluator = self.invoke_calculation(info.spec, arguments)
+        normal = [name for name in captured.outputs if name not in info.caught]
+        values = {name: None for name in captured.outputs}
+        try:
+            # Das Hauptergebnis bestimmt Erfolg oder Fehler. Erst danach werden
+            # angeforderte Zwischenwerte aus derselben Auswertung entnommen.
+            evaluator.resolve(info.spec.symbol)
+            for name in normal:
+                values[name] = evaluator.resolve(name)
+            return values
+        except LangCalculationError as error:
+            match = next(
+                (name for name, declared in info.caught.items()
+                 if declared.name == error.name and
+                 (declared.identity == error.identity or declared.identity[:1] == ("__local__",))),
+                None,
+            )
+            if match is None:
+                raise
+            values[match] = error.payload if info.caught[match].payload is not None else True
+            return values
 
     def evaluate_method(self, values: Any, name: str, arguments: list[Any]) -> Any:
         if name == "keys": return list(values.keys())
@@ -227,5 +296,8 @@ def validate_runtime_value(value: Any, expected: Type, context: str = "value") -
         )
 
 
-def execute(checked: CheckedProgram, registry: ModuleRegistry | None = None) -> ExecutionResult:
-    return Evaluator(checked, registry).run()
+def execute(
+    checked: CheckedProgram, registry: ModuleRegistry | None = None,
+    arguments: dict[str, Any] | None = None,
+) -> ExecutionResult:
+    return Evaluator(checked, registry, arguments).run()

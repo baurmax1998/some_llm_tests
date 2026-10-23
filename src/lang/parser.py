@@ -3,10 +3,11 @@ from __future__ import annotations
 from dataclasses import replace
 
 from .ast import (
-    Annotation, Binary, Binding, BindingPattern, Call, Expr, Field, IfExpr,
-    Index, Lambda, ListExpr, Literal, LiteralPattern, LocalLet, MapExpr,
-    MatchCase, MatchExpr, MethodCall, Name, NullPattern, Program, RecordExpr,
-    SafeField, SafeMethodCall, SourceSpan, TypeRef, Unary, WildcardPattern,
+    Annotation, Binary, Binding, BindingPattern, Call, CapturedCall, ErrorExpr,
+    Expr, Field, IfExpr, Index, Lambda, ListExpr, Literal, LiteralPattern,
+    LocalLet, MapExpr, MatchCase, MatchExpr, MethodCall, Name, NamedArgument,
+    NullPattern, OutputAccess, Program, RecordExpr, SafeField, SafeMethodCall,
+    SourceSpan, TypeRef, Unary, WildcardPattern,
 )
 from .errors import LangIncompleteError, LangSyntaxError
 from .lexer import Token, lex
@@ -70,11 +71,26 @@ class Parser:
                     and self.current.kind == "EOF"
                 ):
                     raise LangIncompleteError("'goal' oder 'let'")
-                token = self.tokens[self.index - 1]
-                raise LangSyntaxError(
-                    f"Erwartet 'goal' oder 'let', gefunden {keyword!r}",
-                    token.offset, token.offset + len(token.value),
-                )
+                # Mehrfachbindungen sind absichtlich die einzige Definition ohne
+                # Schlüsselwort: `wert, fehler = berechnung(...)`.
+                outputs = [keyword]
+                if not self.match(","):
+                    token = self.tokens[self.index - 1]
+                    raise LangSyntaxError(
+                        f"Erwartet 'goal', 'let' oder eine Mehrfachbindung, gefunden {keyword!r}",
+                        token.offset, token.offset + len(token.value),
+                    )
+                outputs.append(self.expect("NAME").value)
+                while self.match(","):
+                    outputs.append(self.expect("NAME").value)
+                self.expect("=")
+                call = self.parse_expression()
+                if not isinstance(call, Call):
+                    raise LangSyntaxError("Mehrfachbindung benötigt einen Aufruf", binding_start)
+                captured = CapturedCall(call, tuple(outputs))
+                span = SourceSpan(binding_start, self.current.offset)
+                bindings.extend(Binding(name, OutputAccess(captured, name), span=span) for name in outputs)
+                continue
             name = self.expect("NAME").value
             annotation = None
             if self.match(":"):
@@ -148,6 +164,11 @@ class Parser:
             if token.value == "null":
                 return Literal(None)
             return Literal(token.value == "true")
+        if token.kind == "NAME" and token.value == "err":
+            self.advance()
+            name = self.expect("NAME").value
+            payload = self.parse_expression() if self.match("=") else None
+            return ErrorExpr(name, payload)
         if token.kind == "NAME" and token.value == "let":
             self.advance()
             name = self.expect("NAME").value
@@ -306,11 +327,27 @@ class Parser:
             else:
                 return value
 
-    def parse_arguments_after_open(self) -> tuple[Expr, ...]:
-        arguments: list[Expr] = []
+    def parse_arguments_after_open(self) -> tuple[Expr | NamedArgument, ...]:
+        arguments: list[Expr | NamedArgument] = []
         if not self.match(")"):
             while True:
-                arguments.append(self.parse_expression())
+                # `name: wert` ist ein benanntes Aufrufargument. Eine mit einem
+                # Großbuchstaben beginnende rechte Seite bleibt zur Kompatibilität
+                # eine Typannotation (`orders: List<Order>`).
+                if (
+                    self.current.kind == "NAME"
+                    and self.index + 2 < len(self.tokens)
+                    and self.tokens[self.index + 1].kind == ":"
+                    and not (
+                        self.tokens[self.index + 2].kind == "NAME"
+                        and self.tokens[self.index + 2].value[:1].isupper()
+                    )
+                ):
+                    name = self.advance().value
+                    self.advance()
+                    arguments.append(NamedArgument(name, self.parse_expression()))
+                else:
+                    arguments.append(self.parse_expression())
                 if self.match(")"):
                     break
                 self.expect(",")

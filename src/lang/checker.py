@@ -1,7 +1,8 @@
 """Typprüfung mit Vorwärtsreferenzen und rückwärts propagierten Erwartungen."""
 from __future__ import annotations
-from dataclasses import dataclass
+from dataclasses import dataclass, fields, is_dataclass
 from . import ast
+from .calculation import CalculationSpec, ErrorSpec
 from .dependencies import check_definition_order, check_dependency_cycles
 from .errors import LangNameError, LangTypeError
 from .registry import ModuleRegistry
@@ -13,10 +14,20 @@ from .types import (
 
 
 @dataclass(frozen=True)
+class CaptureInfo:
+    spec: CalculationSpec
+    caught: dict[str, ErrorSpec]
+
+
+@dataclass(frozen=True)
 class CheckedProgram:
     program: ast.Program
     bindings: dict[str, Type]
     records: dict[str, RecordType]
+    inputs: dict[str, Type]
+    direct_errors: dict[str, tuple[ErrorSpec, ...]]
+    call_specs: dict[int, CalculationSpec]
+    captures: dict[int, CaptureInfo]
 
     def type_of(self, name: str) -> str:
         return format_type(self.bindings[name])
@@ -28,6 +39,13 @@ class TypeChecker:
         self.counter = 0
         self.records: dict[str, RecordType] = {}
         self.bindings: dict[str, Type] = {}
+        self.inputs: dict[str, Type] = {}
+        self.direct_errors: dict[str, tuple[ErrorSpec, ...]] = {}
+        self.error_payloads: dict[str, Type | None] = {}
+        self.call_specs: dict[int, CalculationSpec] = {}
+        self.captures: dict[int, CaptureInfo] = {}
+        self.capture_types: dict[int, dict[str, Type]] = {}
+        self.program: ast.Program | None = None
 
     def fresh(self) -> TypeVariable:
         result = TypeVariable(self.counter)
@@ -55,11 +73,18 @@ class TypeChecker:
     def check(self, program: ast.Program) -> CheckedProgram:
         check_definition_order(program)
         check_dependency_cycles(program)
+        self.program = program
         # Deklarationsannotationen werden absichtlich noch nicht angewandt:
         # Frühere Verwendungen dürfen den Typ zuerst festlegen. So kann eine
         # spätere, redundante Annotation zuverlässig erkannt werden.
         for binding in program.bindings:
             self.bindings[binding.name] = self.fresh()
+        self.prepare_errors(program)
+        # Mehrfachausgänge müssen vor dem Goal bekannt sein, damit dortige
+        # Präsenzprüfungen (`fehler != null`) korrekt verengt werden können.
+        for binding in program.bindings:
+            if isinstance(binding.value, ast.OutputAccess):
+                unify(self.bindings[binding.name], self.infer_capture(binding.value, self.bindings))
         for binding in program.bindings:
             try:
                 expected = self.bindings[binding.name]
@@ -82,9 +107,145 @@ class TypeChecker:
                 if span is not None:
                     exc.attach(span.start, span.end)
                 raise
-        for name, type_ in self.bindings.items():
+        for name, type_ in {**self.bindings, **self.inputs}.items():
             self.require_resolved(type_, name, set())
-        return CheckedProgram(program, dict(self.bindings), dict(self.records))
+        return CheckedProgram(
+            program, dict(self.bindings), dict(self.records), dict(self.inputs),
+            dict(self.direct_errors), dict(self.call_specs), dict(self.captures),
+        )
+
+    def prepare_errors(self, program: ast.Program) -> None:
+        """Reserviert Nutzwerttypen und ordnet Fehler ihren Definitionen zu."""
+        def collect(value: object) -> list[ErrorSpec]:
+            found: list[ErrorSpec] = []
+            if isinstance(value, ast.ErrorExpr):
+                payload = self.error_payloads.get(value.name)
+                if value.payload is not None:
+                    if value.name in self.error_payloads and payload is None:
+                        raise LangTypeError(f"Fehler {value.name!r} wird mit und ohne Nutzwert verwendet")
+                    payload = payload or self.fresh()
+                elif value.name in self.error_payloads and payload is not None:
+                    raise LangTypeError(f"Fehler {value.name!r} wird mit und ohne Nutzwert verwendet")
+                self.error_payloads[value.name] = payload
+                found.append(ErrorSpec(value.name, ("__local__", value.name), payload))
+                if value.payload is not None:
+                    found.extend(collect(value.payload))
+                return found
+            if isinstance(value, ast.Call) and isinstance(value.function, ast.Name) and value.function.origin:
+                if self.registry.has_calculation(value.function.name, value.function.origin):
+                    spec = self.registry.resolve_calculation(value.function.name, value.function.origin)
+                    overrides = {item.name for item in value.arguments if isinstance(item, ast.NamedArgument)}
+                    found.extend(spec.possible_errors(overrides))
+            if isinstance(value, ast.NamedArgument):
+                return collect(value.value)
+            if isinstance(value, ast.Expr) and is_dataclass(value):
+                for descriptor in fields(value):
+                    if descriptor.name != "span":
+                        found.extend(collect(getattr(value, descriptor.name)))
+            elif isinstance(value, tuple):
+                for item in value:
+                    found.extend(collect(item))
+            return found
+
+        for binding in program.bindings:
+            unique = {error.identity: error for error in collect(binding.value)}
+            self.direct_errors[binding.name] = tuple(unique.values())
+
+    def local_spec(self, symbol: str) -> CalculationSpec:
+        assert self.program is not None
+        from .dependencies import expression_names
+        dependencies = {
+            binding.name: expression_names(binding.value)
+            for binding in self.program.bindings
+        }
+        # Noch nicht besuchte freie Namen erhalten beim Prüfen des Arguments
+        # ihren Typ und werden in dasselbe Interface aufgenommen.
+        return CalculationSpec(
+            symbol, (), self.bindings, self.inputs, dependencies,
+            self.direct_errors, None,
+        )
+
+    def calculation_spec(self, call: ast.Call) -> CalculationSpec | None:
+        if not isinstance(call.function, ast.Name):
+            return None
+        name = call.function
+        if name.origin:
+            if self.registry.has_calculation(name.name, name.origin):
+                return self.registry.resolve_calculation(name.name, name.origin)
+            return None
+        if name.name in self.bindings and any(isinstance(arg, ast.NamedArgument) for arg in call.arguments):
+            return self.local_spec(name.name)
+        return None
+
+    def infer_calculation_call(
+        self, call: ast.Call, scope: dict[str, Type], expected: Type | None = None
+    ) -> tuple[Type, CalculationSpec]:
+        spec = self.calculation_spec(call)
+        if spec is None:
+            raise LangTypeError("Benannte Argumente benötigen eine aufrufbare Berechnung")
+        if any(not isinstance(argument, ast.NamedArgument) for argument in call.arguments):
+            raise LangTypeError("Berechnungsaufrufe dürfen benannte und positionale Argumente nicht mischen")
+        arguments = list(call.arguments)
+        names = [argument.name for argument in arguments]
+        if len(names) != len(set(names)):
+            raise LangTypeError("Aufruf enthält ein Argument mehrfach")
+        allowed = spec.allowed_arguments()
+        unknown = set(names) - allowed
+        if unknown:
+            raise LangNameError(f"Unbekanntes Argument {sorted(unknown)[0]!r} für {spec.symbol!r}")
+        missing = spec.required_inputs(set(names))
+        if missing:
+            raise LangNameError(
+                f"Aufruf von {spec.symbol!r} benötigt: {', '.join(sorted(missing))}"
+            )
+        for argument in arguments:
+            argument_type = spec.output_types.get(argument.name)
+            if argument_type is None:
+                argument_type = spec.input_types.get(argument.name)
+            if argument_type is None:
+                argument_type = self.inputs.setdefault(argument.name, self.fresh())
+                spec.input_types[argument.name] = argument_type
+            self.infer(argument.value, scope, argument_type)
+        result = spec.result_type
+        if expected is not None:
+            self.assign(expected, result)
+            result = expected
+        self.call_specs[id(call)] = spec
+        return result, spec
+
+    def infer_capture(self, access: ast.OutputAccess, scope: dict[str, Type]) -> Type:
+        key = id(access.captured)
+        if key not in self.capture_types:
+            _, spec = self.infer_calculation_call(access.captured.call, scope)
+            errors = spec.possible_errors({
+                item.name for item in access.captured.call.arguments
+                if isinstance(item, ast.NamedArgument)
+            })
+            by_name: dict[str, list[ErrorSpec]] = {}
+            for error in errors:
+                by_name.setdefault(error.name, []).append(error)
+            caught: dict[str, ErrorSpec] = {}
+            types: dict[str, Type] = {}
+            reachable_outputs = {spec.symbol} | (spec.allowed_arguments() & set(spec.output_types))
+            for name in access.captured.outputs:
+                matches = by_name.get(name, [])
+                if len(matches) > 1:
+                    raise LangTypeError(f"Fehlerausgang {name!r} ist mehrdeutig")
+                if matches:
+                    caught[name] = matches[0]
+                    payload = matches[0].payload or BOOL
+                    types[name] = NullableType(payload)
+                elif name in reachable_outputs:
+                    types[name] = spec.output_types[name]
+                else:
+                    raise LangNameError(f"Berechnung {spec.symbol!r} besitzt keinen Ausgang {name!r}")
+            if caught:
+                for name in access.captured.outputs:
+                    if name not in caught:
+                        types[name] = self.as_nullable(types[name])
+            self.capture_types[key] = types
+            self.captures[key] = CaptureInfo(spec, caught)
+        return self.capture_types[key][access.name]
 
     def is_fully_resolved(self, type_: Type, seen: set[int] | None = None) -> bool:
         seen = set() if seen is None else seen
@@ -142,14 +303,27 @@ class TypeChecker:
                 result = STRING
         elif isinstance(expression, ast.Name):
             if expression.origin:
+                if self.registry.has_calculation(expression.name, expression.origin):
+                    raise LangTypeError("Eine Berechnung muss mit benannten Argumenten aufgerufen werden")
                 result = self.registry.resolve(expression.name, expression.origin).type
             else:
-                if expression.name not in scope:
-                    raise LangNameError(f"Unbekannter Name {expression.name!r}")
-                result = scope[expression.name]
+                if expression.name in scope:
+                    result = scope[expression.name]
+                else:
+                    # Freie Namen sind Eingaben der umgebenden Berechnung.
+                    result = self.inputs.setdefault(expression.name, self.fresh())
         elif isinstance(expression, ast.Annotation):
             result = self.from_ref(expression.type_ref)
             self.infer(expression.value, scope, result)
+        elif isinstance(expression, ast.ErrorExpr):
+            payload = self.error_payloads[expression.name]
+            if expression.payload is not None and payload is not None:
+                self.infer(expression.payload, scope, payload)
+            # `err` ist ein Bottom-Ausdruck: der erwartete Erfolgswert wird
+            # nicht durch den Fehler eingeschränkt.
+            result = expected or self.fresh()
+        elif isinstance(expression, ast.OutputAccess):
+            result = self.infer_capture(expression, scope)
         elif isinstance(expression, ast.ListExpr):
             element = prune(expected).element if isinstance(prune(expected), ListType) else self.fresh()
             for item in expression.items:
@@ -289,9 +463,13 @@ class TypeChecker:
             self.infer(expression.body, local, body_type)
             result = FunctionType(parameters, body_type)
         elif isinstance(expression, ast.Call):
-            arguments = [self.infer(argument, scope) for argument in expression.arguments]
-            result = expected or self.fresh()
-            self.infer(expression.function, scope, FunctionType(arguments, result))
+            calculation = self.calculation_spec(expression)
+            if calculation is not None or any(isinstance(arg, ast.NamedArgument) for arg in expression.arguments):
+                result, _ = self.infer_calculation_call(expression, scope, expected)
+            else:
+                arguments = [self.infer(argument, scope) for argument in expression.arguments]
+                result = expected or self.fresh()
+                self.infer(expression.function, scope, FunctionType(arguments, result))
         elif isinstance(expression, ast.MethodCall):
             result = self.infer_method(expression, scope, expected)
         else:  # pragma: no cover

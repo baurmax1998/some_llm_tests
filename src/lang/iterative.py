@@ -37,6 +37,11 @@ def analyze_semantics(program: Program | None, registry: ModuleRegistry) -> Sema
         checked = check(program, registry)
     except LangError as exc:
         return SemanticSnapshot(program, None, frozenset(required), exc)
+    # Der normale Compiler akzeptiert freie Namen als Aufrufparameter. Bei der
+    # tokenweisen Erzeugung bleiben sie dennoch offen, damit ein in sich
+    # geschlossenes Programm weiterhin durch nachfolgende Lets erzeugbar ist.
+    if required:
+        return SemanticSnapshot(program, None, frozenset(required), None)
     return SemanticSnapshot(program, checked, frozenset(), None)
 
 
