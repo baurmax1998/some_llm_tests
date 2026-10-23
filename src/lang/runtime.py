@@ -7,7 +7,10 @@ from . import ast
 from .checker import CheckedProgram
 from .errors import LangRuntimeError
 from .registry import ModuleRegistry
-from .types import FunctionType, ListType, Primitive, RecordType, Type, TypeVariable, format_type, prune
+from .types import (
+    FunctionType, ListType, MapType, NullableType, Primitive, RecordType, Type,
+    TypeVariable, format_type, prune,
+)
 
 
 @dataclass(frozen=True)
@@ -53,6 +56,11 @@ class Evaluator:
         if isinstance(expression, ast.Annotation): return self.evaluate(expression.value, local)
         if isinstance(expression, ast.ListExpr):
             return [self.evaluate(item, local) for item in expression.items]
+        if isinstance(expression, ast.MapExpr):
+            return {
+                self.evaluate(key, local): self.evaluate(value, local)
+                for key, value in expression.entries
+            }
         if isinstance(expression, ast.RecordExpr):
             return {name: self.evaluate(value, local) for name, value in expression.fields}
         if isinstance(expression, ast.Unary):
@@ -63,6 +71,9 @@ class Evaluator:
                 return self.evaluate(expression.left, local) and self.evaluate(expression.right, local)
             if expression.operator == "or":
                 return self.evaluate(expression.left, local) or self.evaluate(expression.right, local)
+            if expression.operator == "??":
+                left = self.evaluate(expression.left, local)
+                return left if left is not None else self.evaluate(expression.right, local)
             left, right = self.evaluate(expression.left, local), self.evaluate(expression.right, local)
             operations: dict[str, Callable[[Any, Any], Any]] = {
                 "+": lambda a, b: a + b, "-": lambda a, b: a - b, "*": lambda a, b: a * b,
@@ -70,10 +81,48 @@ class Evaluator:
                 "<": lambda a, b: a < b, "<=": lambda a, b: a <= b,
                 ">": lambda a, b: a > b, ">=": lambda a, b: a >= b,
             }
+            operations.update({
+                "/": lambda a, b: a / b,
+                "%": lambda a, b: a % b,
+            })
             return operations[expression.operator](left, right)
         if isinstance(expression, ast.IfExpr):
             branch = expression.then_branch if self.evaluate(expression.condition, local) else expression.else_branch
             return self.evaluate(branch, local)
+        if isinstance(expression, ast.MatchExpr):
+            value = self.evaluate(expression.value, local)
+            for case in expression.cases:
+                pattern = case.pattern
+                matched = False
+                case_local = local
+                if isinstance(pattern, ast.NullPattern):
+                    matched = value is None
+                elif isinstance(pattern, ast.LiteralPattern):
+                    matched = value == pattern.value
+                elif isinstance(pattern, ast.BindingPattern):
+                    matched = True
+                    case_local = {**local, pattern.name: value}
+                elif isinstance(pattern, ast.WildcardPattern):
+                    matched = True
+                if matched:
+                    return self.evaluate(case.body, case_local)
+            raise LangRuntimeError("Kein match-Fall passt zum Wert")
+        if isinstance(expression, ast.LocalLet):
+            value = self.evaluate(expression.value, local)
+            return self.evaluate(expression.body, {**local, expression.name: value})
+        if isinstance(expression, ast.Index):
+            try:
+                return self.evaluate(expression.value, local)[self.evaluate(expression.index, local)]
+            except (KeyError, IndexError) as exc:
+                raise LangRuntimeError("Index oder Map-Schlüssel ist nicht vorhanden") from exc
+        if isinstance(expression, ast.SafeField):
+            value = self.evaluate(expression.value, local)
+            if value is None:
+                return None
+            try:
+                return value[expression.name] if isinstance(value, dict) else getattr(value, expression.name)
+            except (KeyError, AttributeError) as exc:
+                raise LangRuntimeError(f"Feld {expression.name!r} fehlt zur Laufzeit") from exc
         if isinstance(expression, ast.Field):
             value = self.evaluate(expression.value, local)
             try:
@@ -90,15 +139,44 @@ class Evaluator:
         if isinstance(expression, ast.Call):
             function = self.evaluate(expression.function, local)
             return function(*(self.evaluate(argument, local) for argument in expression.arguments))
+        if isinstance(expression, ast.SafeMethodCall):
+            values = self.evaluate(expression.value, local)
+            if values is None:
+                return None
+            # Argumente müssen weiterhin im ursprünglichen Scope ausgewertet werden.
+            arguments = [self.evaluate(argument, local) for argument in expression.arguments]
+            return self.evaluate_method(values, expression.name, arguments)
         if isinstance(expression, ast.MethodCall):
             values = self.evaluate(expression.value, local)
             arguments = [self.evaluate(argument, local) for argument in expression.arguments]
-            if expression.name == "filter": return [item for item in values if arguments[0](item)]
-            if expression.name == "map": return [arguments[0](item) for item in values]
-            if expression.name == "sum": return sum(values)
-            if expression.name == "fold": return reduce(arguments[1], values, arguments[0])
-            raise LangRuntimeError(f"Unbekannte Methode {expression.name!r}")
+            return self.evaluate_method(values, expression.name, arguments)
         raise AssertionError(type(expression))  # pragma: no cover
+
+    def evaluate_method(self, values: Any, name: str, arguments: list[Any]) -> Any:
+        if name == "keys": return list(values.keys())
+        if name == "values": return list(values.values())
+        if name == "get": return values.get(arguments[0])
+        if name == "contains_key": return arguments[0] in values
+        if name == "filter": return [item for item in values if arguments[0](item)]
+        if name == "map": return [arguments[0](item) for item in values]
+        if name == "flat_map": return [mapped for item in values for mapped in arguments[0](item)]
+        if name == "sum": return sum(values)
+        if name == "fold": return reduce(arguments[1], values, arguments[0])
+        if name == "any": return any(arguments[0](item) for item in values)
+        if name == "all": return all(arguments[0](item) for item in values)
+        if name == "count": return len(values)
+        if name == "take": return values[:arguments[0]]
+        if name == "drop": return values[arguments[0]:]
+        if name == "first": return values[0] if values else None
+        if name == "last": return values[-1] if values else None
+        if name == "find": return next((item for item in values if arguments[0](item)), None)
+        if name == "sort": return sorted(values)
+        if name == "group_by":
+            grouped = {}
+            for item in values:
+                grouped.setdefault(arguments[0](item), []).append(item)
+            return grouped
+        raise LangRuntimeError(f"Unbekannte Methode {name!r}")
 
 
 def validate_runtime_value(value: Any, expected: Type, context: str = "value") -> None:
@@ -110,13 +188,28 @@ def validate_runtime_value(value: Any, expected: Type, context: str = "value") -
             valid = type(value) is bool
         elif expected.name == "Int":
             valid = type(value) is int
+        elif expected.name == "Float":
+            valid = type(value) is float
+        elif expected.name == "Null":
+            valid = value is None
         elif expected.name == "String":
             valid = isinstance(value, str)
+    elif isinstance(expected, NullableType):
+        if value is None:
+            return
+        validate_runtime_value(value, expected.inner, context)
+        return
     elif isinstance(expected, ListType):
         valid = isinstance(value, list)
         if valid:
             for index, item in enumerate(value):
                 validate_runtime_value(item, expected.element, f"{context}[{index}]")
+    elif isinstance(expected, MapType):
+        valid = isinstance(value, dict)
+        if valid:
+            for key, item in value.items():
+                validate_runtime_value(key, expected.key, f"{context}.key")
+                validate_runtime_value(item, expected.value, f"{context}[{key!r}]")
     elif isinstance(expected, RecordType):
         valid = isinstance(value, dict)
         if valid:

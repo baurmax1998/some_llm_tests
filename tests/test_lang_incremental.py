@@ -15,6 +15,8 @@ from src.lang import LangPrefixState, LangSyntaxError, PrefixStatus, check_prefi
         'goal result: String = "noch offen',
         "goal result: Int = 1 +",
         "goal result: Bool = 1 =",
+        "goal result: Int = maybe ?",
+        "goal result: Int = match maybe { null =>",
         "goal result: List<Int> = values.map(value =",
     ],
 )

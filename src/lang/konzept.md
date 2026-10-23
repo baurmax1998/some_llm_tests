@@ -72,7 +72,14 @@ let price_per_square_meter: Int = 1200
 
 Namen dürfen vor ihrer Wertdefinition verwendet werden. Ihre Typen müssen dabei ausdrücklich angegeben oder aus dem Kontext ableitbar sein.
 
-Ein Name wird pro Gültigkeitsbereich nur einmal definiert.
+Ein Name wird pro Gültigkeitsbereich nur einmal definiert. Lokale Werte werden als Ausdruck mit `in` gebunden:
+
+```text
+let subtotal = orders.map(order => order.amount).sum()
+in subtotal * 2
+```
+
+Der lokale Name gilt ausschließlich im Ausdruck hinter `in`.
 
 ### 2. Typangaben bei der Verwendung
 
@@ -120,10 +127,22 @@ Die Grundtypen der ersten Version sind:
 |---|---|
 | `Bool` | Wahrheitswert |
 | `Int` | Ganze Zahl |
+| `Float` | Gleitkommazahl |
 | `String` | Zeichenfolge |
+| `T?` | Wert vom Typ `T` oder `null` |
 | `List<T>` | Liste mit Elementtyp `T` |
+| `Map<K, V>` | Schlüssel-Wert-Zuordnung |
 
-Implizite Typumwandlungen sind zunächst ausgeschlossen.
+Implizite Typumwandlungen sind zunächst ausgeschlossen. Nullable Werte werden mit `?` markiert und mit `null`, `??`, sicheren Zugriffen oder Typverengung behandelt:
+
+```text
+let score: Int? = scores.get("Ada")
+in if score != null then score + 1 else 0
+```
+
+```text
+customer?.address?.city ?? "unbekannt"
+```
 
 ### 4. Records und Listen
 
@@ -153,6 +172,14 @@ Listen verwenden eckige Klammern:
 let names = ["Ada", "Linus", "Grace"]
 ```
 
+Maps verwenden Record-Klammern mit String-Schlüsseln:
+
+```text
+let scores: Map<String, Int> = {"Ada": 10, "Grace": 12}
+```
+
+Listen, Strings und Maps unterstützen Indexzugriffe wie `names[0]` und `scores["Ada"]`.
+
 Für leere Listen muss der Elementtyp aus dem Kontext oder einer Annotation bekannt sein:
 
 ```text
@@ -174,13 +201,23 @@ let is_member: Bool = true
 
 Die Bedingung muss `Bool` sein. Beide Zweige müssen zum erwarteten Ergebnistyp passen.
 
+`match` prüft Werte durch geordnete Muster. Ein Binding- oder `_`-Muster schließt die Fälle ab:
+
+```text
+match score {
+    null => 0,
+    value => value + 1
+}
+```
+
 Die Sprache unterstützt zunächst:
 
 | Bereich | Operatoren |
 |---|---|
-| Arithmetik | `+`, `-`, `*` |
+| Arithmetik | `+`, `-`, `*`, `/`, `%` |
 | Vergleiche | `==`, `!=`, `<`, `<=`, `>`, `>=` |
 | Boolesche Ausdrücke | `not`, `and`, `or` |
+| Null-Behandlung | `??`, `?.`, Vergleich mit `null` |
 | Strings | `+` zur Verkettung |
 
 Bei überladenen Operatoren wie `+` muss der Kontext die Bedeutung eindeutig bestimmen.
@@ -202,6 +239,14 @@ orders
 | `.map(transform)` | Elemente in neue Werte umwandeln |
 | `.sum()` | Zahlen addieren; leere Liste ergibt `0` |
 | `.fold(initial, reducer)` | Elemente mit einem Akkumulator zusammenführen |
+| `.flat_map(transform)` | Ergebnislisten zusammenführen |
+| `.find(predicate)` | Ersten Treffer als optionalen Wert liefern |
+| `.any(predicate)` / `.all(predicate)` | Prädikat über die Liste prüfen |
+| `.count()` | Anzahl der Elemente liefern |
+| `.take(n)` / `.drop(n)` | Listenpräfix nehmen oder überspringen |
+| `.first()` / `.last()` | Optionales Rand-Element liefern |
+| `.sort()` | Vergleichbare Werte sortieren |
+| `.group_by(key)` | Elemente in einer `Map` gruppieren |
 
 Eine komplexere Schleife wird als `fold` ausgedrückt:
 

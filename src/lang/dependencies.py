@@ -21,6 +21,19 @@ def expression_names(expression: ast.Expr, local: frozenset[str] = frozenset()) 
         return set() if expression.origin or expression.name in local else {expression.name}
     if isinstance(expression, ast.Lambda):
         return expression_names(expression.body, local | frozenset(expression.parameters))
+    if isinstance(expression, ast.LocalLet):
+        return (
+            expression_names(expression.value, local)
+            | expression_names(expression.body, local | {expression.name})
+        )
+    if isinstance(expression, ast.MatchExpr):
+        result = expression_names(expression.value, local)
+        for case in expression.cases:
+            case_local = local
+            if isinstance(case.pattern, ast.BindingPattern):
+                case_local = local | {case.pattern.name}
+            result.update(expression_names(case.body, case_local))
+        return result
     result: set[str] = set()
     if is_dataclass(expression):
         for descriptor in fields(expression):

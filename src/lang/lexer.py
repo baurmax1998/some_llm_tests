@@ -15,9 +15,9 @@ class Token:
 
 _PATTERN = re.compile(
     r"(?P<SPACE>\s+)|(?P<COMMENT>\#[^\n]*)|"
-    r"(?P<STRING>\"(?:\\.|[^\"\\])*\")|(?P<INT>\d+)|"
-    r"(?P<ARROW>=>)|(?P<ORIGIN>::)|(?P<OP>==|!=|<=|>=|[+*\-<>])|"
-    r"(?P<PUNCT>[(){}\[\],:.=])|(?P<NAME>[A-Za-z_][A-Za-z0-9_]*)"
+    r"(?P<STRING>\"(?:\\.|[^\"\\])*\")|(?P<FLOAT>\d+\.\d+)|(?P<INT>\d+)|"
+    r"(?P<ARROW>=>)|(?P<ORIGIN>::)|(?P<SAFE_DOT>\?\.)|(?P<OP>==|!=|<=|>=|\?\?|[+*/%\-<>])|"
+    r"(?P<PUNCT>[(){}\[\],:.=?])|(?P<NAME>[A-Za-z_][A-Za-z0-9_]*)"
 )
 
 

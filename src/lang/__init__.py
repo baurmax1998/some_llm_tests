@@ -11,11 +11,15 @@ from .errors import (
     LangSyntaxError, LangTypeError,
 )
 from .incremental import LangPrefixState, PrefixCheck, PrefixStatus, check_prefix
+from .iterative import IncrementalCompiler, SemanticSnapshot
 from .parser import Parser, parse
 from .registry import ExternalFunction, ModuleRegistry
 from .runtime import ExecutionResult, Evaluator, execute
 from .stdlib import standard_registry
-from .types import BOOL, INT, STRING, FunctionType, ListType, RecordType, format_type
+from .types import (
+    BOOL, FLOAT, INT, NULL, STRING, FunctionType, ListType, MapType,
+    NullableType, RecordType, format_type,
+)
 
 
 def compile_program(source: str, registry: ModuleRegistry | None = None) -> CheckedProgram:
@@ -32,12 +36,14 @@ def run(source: str, registry: ModuleRegistry | None = None) -> ExecutionResult:
 
 
 __all__ = [
-    "BOOL", "INT", "STRING", "CheckedProgram", "Evaluator", "ExecutionResult",
+    "BOOL", "FLOAT", "INT", "NULL", "STRING", "CheckedProgram", "Evaluator", "ExecutionResult",
     "ExternalFunction", "FunctionType", "LangDefinitionOrderError",
     "LangDependencyError", "LangError",
     "LangIncompleteError", "LangConstraint", "LangNameError", "LangPrefixState",
+    "IncrementalCompiler", "SemanticSnapshot",
     "LangRuntimeError", "LangSyntaxError",
-    "LangTypeError", "ListType", "ModuleRegistry", "Parser", "PrefixCheck",
+    "LangTypeError", "ListType", "MapType", "ModuleRegistry", "NullableType",
+    "Parser", "PrefixCheck",
     "PrefixStatus", "Program", "RecordType", "TypeChecker", "check",
     "check_definition_order", "check_dependency_cycles", "check_prefix",
     "compile_program", "dependency_graph",

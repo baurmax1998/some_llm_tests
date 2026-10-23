@@ -13,7 +13,8 @@ class SourceSpan:
 @dataclass(frozen=True)
 class TypeRef:
     name: str
-    argument: TypeRef | None = None
+    arguments: tuple[TypeRef, ...] = ()
+    nullable: bool = False
 
 
 @dataclass(frozen=True)
@@ -37,6 +38,24 @@ class ListExpr(Expr): items: tuple[Expr, ...]
 
 @dataclass(frozen=True)
 class RecordExpr(Expr): fields: tuple[tuple[str, Expr], ...]
+
+
+@dataclass(frozen=True)
+class MapExpr(Expr): entries: tuple[tuple[Expr, Expr], ...]
+
+
+@dataclass(frozen=True)
+class Index(Expr):
+    value: Expr
+    index: Expr
+
+
+@dataclass(frozen=True)
+class LocalLet(Expr):
+    name: str
+    value: Expr
+    body: Expr
+    annotation: TypeRef | None = None
 
 
 @dataclass(frozen=True)
@@ -84,10 +103,55 @@ class Field(Expr):
 
 
 @dataclass(frozen=True)
+class SafeField(Expr):
+    value: Expr
+    name: str
+
+
+@dataclass(frozen=True)
 class MethodCall(Expr):
     value: Expr
     name: str
     arguments: tuple[Expr, ...]
+
+
+@dataclass(frozen=True)
+class SafeMethodCall(Expr):
+    value: Expr
+    name: str
+    arguments: tuple[Expr, ...]
+
+
+@dataclass(frozen=True)
+class Pattern: pass
+
+
+@dataclass(frozen=True)
+class NullPattern(Pattern): pass
+
+
+@dataclass(frozen=True)
+class LiteralPattern(Pattern): value: Any
+
+
+@dataclass(frozen=True)
+class BindingPattern(Pattern): name: str
+
+
+@dataclass(frozen=True)
+class WildcardPattern(Pattern): pass
+
+
+@dataclass(frozen=True)
+class MatchCase:
+    pattern: Pattern
+    body: Expr
+
+
+@dataclass(frozen=True)
+class MatchExpr(Expr):
+    value: Expr
+    cases: tuple[MatchCase, ...]
 
 
 @dataclass(frozen=True)

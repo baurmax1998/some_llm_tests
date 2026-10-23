@@ -9,9 +9,9 @@ import numpy as np
 
 from ..mask.schema import SchemaConstraint
 from . import ast
-from .checker import CheckedProgram, check
-from .errors import LangError
+from .checker import CheckedProgram
 from .incremental import LangPrefixState
+from .iterative import IncrementalCompiler
 from .registry import ModuleRegistry
 
 
@@ -67,8 +67,8 @@ class LangConstraint(SchemaConstraint):
             for fragment, token_ids in fragments.items()
             for token_id in token_ids
         }
-        self._state = LangPrefixState(source)
         self._registry = registry or ModuleRegistry()
+        self._compiler = IncrementalCompiler(self._registry, source)
         self._cached_mask: np.ndarray | None = None
         self._completion_source: str | None = None
         self._checked_program: CheckedProgram | None = None
@@ -76,11 +76,11 @@ class LangConstraint(SchemaConstraint):
 
     @property
     def source(self) -> str:
-        return self._state.source
+        return self._compiler.source
 
     @property
     def state(self) -> LangPrefixState:
-        return self._state
+        return self._compiler.state
 
     @property
     def checked_program(self) -> CheckedProgram | None:
@@ -106,7 +106,7 @@ class LangConstraint(SchemaConstraint):
                     candidate = prefix + character
                     if (
                         self._respects_definition_order_prefix(candidate)
-                        and self._state.can_accept(candidate)
+                        and self._compiler.can_accept(candidate)
                     ):
                         visit(child, candidate)
 
@@ -131,11 +131,11 @@ class LangConstraint(SchemaConstraint):
             raise ValueError(f"Token {token_id} besitzt kein zulässiges Textfragment")
         if (
             not self._respects_definition_order_prefix(fragment)
-            or not self._state.can_accept(fragment)
+            or not self._compiler.can_accept(fragment)
             or self._is_redundant_annotation(fragment)
         ):
             raise ValueError(f"Token {token_id} ist im aktuellen Sprachzustand unzulässig")
-        self._state.accept(fragment)
+        self._compiler.accept(fragment)
         self._cached_mask = None
         self._completion_source = None
         self._checked_program = None
@@ -180,25 +180,15 @@ class LangConstraint(SchemaConstraint):
         return self._terminated and self._program_is_complete()
 
     def _program_is_complete(self) -> bool:
-        if not self._state.is_complete():
+        if not self._compiler.is_complete():
             return False
-        if self._completion_source == self.source:
-            return self._checked_program is not None
-
         self._completion_source = self.source
-        self._checked_program = None
-        assert self._state.program is not None
-        try:
-            self._checked_program = check(self._state.program, self._registry)
-        except LangError:
-            # Ein syntaktisch vollständiges Präfix kann durch weitere `let`-
-            # Definitionen oder Annotationen noch semantisch vollständig werden.
-            return False
-        return True
+        self._checked_program = self._compiler.checked_program
+        return self._checked_program is not None
 
     def reset(self, source: str = "") -> None:
         """Setzt dieselbe Constraint-Instanz für eine neue Generierung zurück."""
-        self._state = LangPrefixState(source)
+        self._compiler.reset(source)
         self._cached_mask = None
         self._completion_source = None
         self._checked_program = None

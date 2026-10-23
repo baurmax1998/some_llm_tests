@@ -14,7 +14,9 @@ class Primitive(Type):
 
 BOOL = Primitive("Bool")
 INT = Primitive("Int")
+FLOAT = Primitive("Float")
 STRING = Primitive("String")
+NULL = Primitive("Null")
 
 
 @dataclass
@@ -26,6 +28,17 @@ class TypeVariable(Type):
 @dataclass
 class ListType(Type):
     element: Type
+
+
+@dataclass
+class MapType(Type):
+    key: Type
+    value: Type
+
+
+@dataclass
+class NullableType(Type):
+    inner: Type
 
 
 @dataclass
@@ -54,6 +67,10 @@ def occurs(variable: TypeVariable, type_: Type) -> bool:
         return True
     if isinstance(type_, ListType):
         return occurs(variable, type_.element)
+    if isinstance(type_, MapType):
+        return occurs(variable, type_.key) or occurs(variable, type_.value)
+    if isinstance(type_, NullableType):
+        return occurs(variable, type_.inner)
     if isinstance(type_, FunctionType):
         return any(occurs(variable, item) for item in [*type_.parameters, type_.result])
     if isinstance(type_, RecordType):
@@ -72,10 +89,21 @@ def unify(left: Type, right: Type, context: str = "") -> Type:
         return right
     if isinstance(right, TypeVariable):
         return unify(right, left, context)
+    if left == NULL and isinstance(right, NullableType):
+        return right
+    if right == NULL and isinstance(left, NullableType):
+        return left
+    if isinstance(left, NullableType) and isinstance(right, NullableType):
+        unify(left.inner, right.inner, context)
+        return left
     if isinstance(left, Primitive) and isinstance(right, Primitive) and left == right:
         return left
     if isinstance(left, ListType) and isinstance(right, ListType):
         unify(left.element, right.element, context)
+        return left
+    if isinstance(left, MapType) and isinstance(right, MapType):
+        unify(left.key, right.key, context)
+        unify(left.value, right.value, context)
         return left
     if isinstance(left, FunctionType) and isinstance(right, FunctionType):
         if len(left.parameters) != len(right.parameters):
@@ -116,6 +144,10 @@ def clone_type(type_: Type, variables: dict[int, TypeVariable] | None = None) ->
         return variables.setdefault(type_.identifier, TypeVariable(type_.identifier))
     if isinstance(type_, ListType):
         return ListType(clone_type(type_.element, variables))
+    if isinstance(type_, MapType):
+        return MapType(clone_type(type_.key, variables), clone_type(type_.value, variables))
+    if isinstance(type_, NullableType):
+        return NullableType(clone_type(type_.inner, variables))
     if isinstance(type_, RecordType):
         return RecordType(type_.name, {
             name: clone_type(field_type, variables)
@@ -134,6 +166,8 @@ def format_type(type_: Type) -> str:
     if isinstance(type_, Primitive): return type_.name
     if isinstance(type_, TypeVariable): return f"?{type_.identifier}"
     if isinstance(type_, ListType): return f"List<{format_type(type_.element)}>"
+    if isinstance(type_, MapType): return f"Map<{format_type(type_.key)}, {format_type(type_.value)}>"
+    if isinstance(type_, NullableType): return f"{format_type(type_.inner)}?"
     if isinstance(type_, RecordType):
         if type_.name: return type_.name
         fields = ", ".join(f"{k}: {format_type(v)}" for k, v in type_.fields.items())

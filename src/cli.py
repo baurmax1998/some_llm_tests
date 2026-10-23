@@ -12,7 +12,7 @@ from .lang.stdlib import standard_registry
 
 LANG_SYSTEM_PROMPT = """Erzeuge ausschließlich Quelltext der zielorientierten Sprache.
 Ein Programm enthält genau ein `goal name: Typ = Ausdruck` und optional `let`-Definitionen.
-Typen sind Bool, Int, String und List<T>. Antworte ohne Markdown oder Erklärung.
+Typen sind Bool, Int, Float, String, T?, List<T> und Map<K, V>. Antworte ohne Markdown oder Erklärung.
 """
 
 
