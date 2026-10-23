@@ -60,7 +60,6 @@ class Categorization(StrictModel):
 CATEGORY_PROMPT = """Ordne den folgenden Kontext genau einer erlaubten Kategorie zu.
 
 Kontext: Apple hat einen neuen Prozessor für seine Mac-Computer vorgestellt, mit dem lassen sich sport Werte besser berechnen.
-ich freue mich darauf dann meine sport werte zu berechnen
 """
 
 
