@@ -1,0 +1,13 @@
+goal app = {
+    title: "SIC Todos",
+    host: "127.0.0.1",
+    port: 8000,
+    output: "dist",
+    pages: ["page.sic"],
+    endpoints: [
+        {name: "listTodos", method: "GET", path: "/api/todos", source: "list_todos.sic"},
+        {name: "createTodo", method: "POST", path: "/api/todos", source: "create_todo.sic"},
+        {name: "toggleTodo", method: "PATCH", path: "/api/todos/{id}", source: "toggle_todo.sic"},
+        {name: "deleteTodo", method: "DELETE", path: "/api/todos/{id}", source: "delete_todo.sic"}
+    ]
+}

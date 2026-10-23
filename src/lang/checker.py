@@ -301,6 +301,11 @@ class TypeChecker:
                 result = FLOAT
             else:
                 result = STRING
+        elif isinstance(expression, ast.StringBuilder):
+            for part in expression.parts:
+                if isinstance(part, ast.Expr):
+                    self.infer(part, scope)
+            result = STRING
         elif isinstance(expression, ast.Name):
             if expression.origin:
                 if self.registry.has_calculation(expression.name, expression.origin):

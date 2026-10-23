@@ -27,6 +27,15 @@ in subtotal * 2
 
 Unterstützt werden Literale, Records, Maps, Listen, Index- und Feldzugriffe, Lambdas, `if`, `match`, `null`, `??`, `?.`, Arithmetik, Vergleiche sowie `not`, `and`, `or`.
 
+Mehrzeilige String-Builder verwenden dreifache Anführungszeichen und betten
+Ausdrücke mit `{...}` ein. Doppelte Klammern erzeugen literale Klammern:
+
+```sic
+goal greeting: String = """Hallo {name}!
+Du hast {messages.count()} Nachrichten.
+{{name}} bleibt Text."""
+```
+
 Listen bieten `filter`, `map`, `flat_map`, `fold`, `sum`, `find`, `any`, `all`, `count`, `take`, `drop`, `first`, `last`, `sort` und `group_by`. Maps bieten `keys`, `values`, `get` und `contains_key`.
 
 ## Berechnungen
@@ -85,3 +94,9 @@ Verfügbarkeit wird mit `!= null`, `match` oder `??` nachgewiesen. Ungeprüfte V
 1. Tokenweise Syntax-, Namens- und Typprüfung.
 2. Abschlussprüfung von Definitionen, Typen und Zyklen.
 3. Bedarfsgesteuerte Ausführung mit Laufzeitvalidierung externer Werte.
+
+## Web-Prototyp
+
+Ein dünner FastAPI-Host kann SIC-Goals als HTTP-Endpunkte ausführen und
+Page-Goals zu HTML, CSS und JavaScript bauen. Konfiguration und Beispiel sind
+in [web.md](../web.md) beschrieben.

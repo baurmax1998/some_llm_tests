@@ -25,6 +25,29 @@ def lex(source: str, allow_incomplete: bool = False) -> list[Token]:
     tokens: list[Token] = []
     position = 0
     while position < len(source):
+        # String-Builder werden bewusst vor dem regulären String-Muster
+        # erkannt: Ihr Inhalt darf Zeilenumbrüche und einzelne Anführungszeichen
+        # enthalten und wird erst im Parser in Text und `{...}`-Ausdrücke zerlegt.
+        if source.startswith('\"\"\"', position):
+            end = source.find('\"\"\"', position + 3)
+            if end < 0:
+                if allow_incomplete:
+                    tokens.append(Token("PARTIAL_STRING_BUILDER", source[position:], position))
+                    position = len(source)
+                    break
+                raise LangSyntaxError(
+                    "Nicht geschlossener String-Builder", position, len(source)
+                )
+            tokens.append(Token("STRING_BUILDER", source[position + 3:end], position))
+            position = end + 3
+            continue
+        # `\"\"` kann während inkrementeller Eingabe noch der Anfang eines
+        # Triple-Quote-Literals sein und darf daher nicht als leerer String plus
+        # unvollständiger Folgestring verworfen werden.
+        if allow_incomplete and source[position:] == '\"\"':
+            tokens.append(Token("PARTIAL_STRING_BUILDER", source[position:], position))
+            position = len(source)
+            break
         match = _PATTERN.match(source, position)
         if not match:
             remainder = source[position:]

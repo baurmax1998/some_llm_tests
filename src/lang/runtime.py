@@ -68,6 +68,11 @@ class Evaluator:
 
     def evaluate(self, expression: ast.Expr, local: dict[str, Any]) -> Any:
         if isinstance(expression, ast.Literal): return expression.value
+        if isinstance(expression, ast.StringBuilder):
+            return "".join(
+                part if isinstance(part, str) else self.stringify(self.evaluate(part, local))
+                for part in expression.parts
+            )
         if isinstance(expression, ast.Name):
             if expression.origin:
                 return self.registry.resolve(expression.name, expression.origin).implementation
@@ -187,6 +192,15 @@ class Evaluator:
             arguments = [self.evaluate(argument, local) for argument in expression.arguments]
             return self.evaluate_method(values, expression.name, arguments)
         raise AssertionError(type(expression))  # pragma: no cover
+
+    @staticmethod
+    def stringify(value: Any) -> str:
+        """Verwendet die Schreibweise der Sprache für interpolierte Werte."""
+        if value is None:
+            return "null"
+        if type(value) is bool:
+            return "true" if value else "false"
+        return str(value)
 
     def invoke_calculation(self, spec, arguments: dict[str, Any]) -> "Evaluator":
         checked = spec.checked or self.checked

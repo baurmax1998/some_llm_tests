@@ -27,6 +27,12 @@ class Literal(Expr): value: Any
 
 
 @dataclass(frozen=True)
+class StringBuilder(Expr):
+    """Mehrzeiliger String aus statischem Text und eingebetteten Ausdrücken."""
+    parts: tuple[str | Expr, ...]
+
+
+@dataclass(frozen=True)
 class Name(Expr):
     name: str
     origin: tuple[str, ...] = ()

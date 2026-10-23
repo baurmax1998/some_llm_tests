@@ -1,0 +1,5 @@
+goal response: List<Todo> =
+    if saved then updated else err persistenceError = "Todo konnte nicht gespeichert werden"
+let saved = write_json::files::std(updated, "todos.json")
+let updated = todos.filter(todo => todo.id != (id: Int))
+let todos = read_json::files::std("todos.json"): List<Todo>

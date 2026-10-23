@@ -85,6 +85,22 @@ def command_generate(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_build(args: argparse.Namespace) -> int:
+    from .web import build_web
+
+    generated = build_web(args.config)
+    for path in generated:
+        print(path)
+    return 0
+
+
+def command_serve(args: argparse.Namespace) -> int:
+    from .web import serve_web
+
+    serve_web(args.config, reload=args.reload)
+    return 0
+
+
 def command_repl(args: argparse.Namespace) -> int:
     registry = standard_registry(Path.cwd())
     print("SIC REPL – Programm eingeben, mit leerer Zeile ausführen, :quit beendet.")
@@ -131,6 +147,15 @@ def build_parser() -> argparse.ArgumentParser:
     generate_parser.add_argument("--seed", type=int, default=0)
     generate_parser.add_argument("--max-tokens", type=int, default=256)
     generate_parser.set_defaults(handler=command_generate)
+
+    web_build_parser = commands.add_parser("build", help="SIC-Webseiten zu HTML/CSS/JS bauen")
+    web_build_parser.add_argument("config", nargs="?", default="web.sic")
+    web_build_parser.set_defaults(handler=command_build)
+
+    serve_parser = commands.add_parser("serve", help="SIC-Webprojekt mit FastAPI starten")
+    serve_parser.add_argument("config", nargs="?", default="web.sic")
+    serve_parser.add_argument("--reload", action="store_true")
+    serve_parser.set_defaults(handler=command_serve)
 
     repl_parser = commands.add_parser("repl", help="Interaktive Sitzung starten")
     repl_parser.set_defaults(handler=command_repl)

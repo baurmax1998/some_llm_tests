@@ -44,6 +44,19 @@ def test_record_requirements_and_list_pipeline():
     assert run(source).value == [8000, 2500]
 
 
+def test_multiline_string_builder_interpolates_expressions():
+    source = '''
+    goal greeting: String = """Hallo {name}!
+Du hast {messages.count()} Nachrichten.
+{{name}} bleibt Text."""
+    let name = "Ada"
+    let messages = [1, 2, 3]
+    '''
+    assert run(source).value == (
+        "Hallo Ada!\nDu hast 3 Nachrichten.\n{name} bleibt Text."
+    )
+
+
 def test_if_fold_and_forward_function():
     source = """
     goal total: Int = calculate_total(orders)

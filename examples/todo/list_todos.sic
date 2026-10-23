@@ -1,0 +1,2 @@
+goal todos: List<Todo> =
+    read_json::files::std("todos.json"): List<Todo>

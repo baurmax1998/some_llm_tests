@@ -13,6 +13,7 @@ from src.lang import LangPrefixState, LangSyntaxError, PrefixStatus, check_prefi
         "goal result: List<",
         "goal result: List<Int> =",
         'goal result: String = "noch offen',
+        'goal result: String = """Hallo {name}',
         "goal result: Int = 1 +",
         "goal result: Bool = 1 =",
         "goal result: Int = maybe ?",
@@ -23,6 +24,11 @@ from src.lang import LangPrefixState, LangSyntaxError, PrefixStatus, check_prefi
 def test_valid_incomplete_prefixes(source):
     prefix = check_prefix(source)
     assert prefix.status is PrefixStatus.INCOMPLETE
+
+
+def test_complete_multiline_string_builder_is_recognized():
+    checked = check_prefix('goal result: String = """Hallo {"Welt"}"""')
+    assert checked.status is PrefixStatus.COMPLETE
 
 
 def test_complete_program_is_recognized():
