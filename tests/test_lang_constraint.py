@@ -20,8 +20,12 @@ class FakeTokenizer:
             " value": 7,
             " let": 8,
             "▁value": 9,
-            ": Int = 2": 10,
+            " = 2": 10,
             "<special>": 11,
+            "goal total: Int = orders: List<Order>": 12,
+            " orders": 13,
+            ": List<Order>": 14,
+            " = []": 15,
         }
 
     def get_vocab(self):
@@ -38,16 +42,17 @@ def accept(constraint, *token_ids):
 
 
 def test_mask_only_allows_valid_next_token_fragments():
-    constraint = LangConstraint(FakeTokenizer(), vocab_size=14)
+    constraint = LangConstraint(FakeTokenizer(), vocab_size=18)
     mask = constraint.allowed_token_mask()
 
     assert mask.dtype == np.bool_
-    assert mask.shape == (14,)
+    assert mask.shape == (18,)
     assert mask[1]  # goal
+    assert not mask[8]  # let darf nicht vor seiner ersten Anforderung stehen
     assert not mask[2]  # result kann kein erstes Schlüsselwort sein
     assert not mask[0]  # EOS und andere Spezialtokens sind ausgeschlossen
     assert not mask[11]
-    assert not mask[12]  # gepolsterte Modell-IDs sind ausgeschlossen
+    assert not mask[17]  # gepolsterte Modell-IDs sind ausgeschlossen
 
 
 def test_complete_typed_program_finishes_constraint():
@@ -82,6 +87,15 @@ def test_syntactically_complete_program_waits_for_missing_definition():
     assert constraint.allowed_token_mask()[0]
     constraint.accept_token(0)
     assert constraint.is_complete()
+
+
+def test_mask_rejects_redundant_annotation_after_typed_first_use():
+    constraint = LangConstraint(FakeTokenizer())
+    accept(constraint, 12, 8, 13)
+    assert not constraint.allowed_token_mask()[14]
+    with pytest.raises(ValueError):
+        constraint.accept_token(14)
+    assert constraint.allowed_token_mask()[15]
 
 
 def test_invalid_or_special_token_is_rejected_without_state_change():

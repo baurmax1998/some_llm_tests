@@ -1,8 +1,10 @@
 """Parser für die in ``konzept.md`` beschriebene Ausdruckssprache."""
 from __future__ import annotations
+from dataclasses import replace
+
 from .ast import (
     Annotation, Binary, Binding, Call, Expr, Field, IfExpr, Lambda, ListExpr,
-    Literal, MethodCall, Name, Program, RecordExpr, TypeRef, Unary,
+    Literal, MethodCall, Name, Program, RecordExpr, SourceSpan, TypeRef, Unary,
 )
 from .errors import LangIncompleteError, LangSyntaxError
 from .lexer import Token, lex
@@ -48,14 +50,16 @@ class Parser:
             ):
                 raise LangIncompleteError(repr(value))
             raise LangSyntaxError(
-                f"Erwartet {wanted!r} an Position {self.current.offset}, "
-                f"gefunden {self.current.value or self.current.kind!r}"
+                f"Erwartet {wanted!r}, gefunden {self.current.value or self.current.kind!r}",
+                self.current.offset,
+                self.current.offset + max(1, len(self.current.value)),
             )
         return self.tokens[self.index - 1]
 
     def parse_program(self) -> Program:
         bindings: list[Binding] = []
         while self.current.kind != "EOF":
+            binding_start = self.current.offset
             keyword = self.expect("NAME").value
             if keyword not in {"goal", "let"}:
                 if (
@@ -64,14 +68,21 @@ class Parser:
                     and self.current.kind == "EOF"
                 ):
                     raise LangIncompleteError("'goal' oder 'let'")
-                raise LangSyntaxError(f"Erwartet 'goal' oder 'let', gefunden {keyword!r}")
+                token = self.tokens[self.index - 1]
+                raise LangSyntaxError(
+                    f"Erwartet 'goal' oder 'let', gefunden {keyword!r}",
+                    token.offset, token.offset + len(token.value),
+                )
             name = self.expect("NAME").value
             annotation = None
             if self.match(":"):
                 annotation = self.parse_type()
             self.expect("=")
             value = self.parse_expression()
-            bindings.append(Binding(name, value, annotation, keyword == "goal"))
+            bindings.append(Binding(
+                name, value, annotation, keyword == "goal",
+                span=SourceSpan(binding_start, self.current.offset),
+            ))
         goals = sum(binding.is_goal for binding in bindings)
         if goals != 1:
             if self.allow_incomplete and goals == 0:
@@ -90,12 +101,15 @@ class Parser:
             argument = self.parse_type()
             self.expect("OP", ">")
         if name == "List" and argument is None:
+            if self.allow_incomplete and self.current.kind == "EOF":
+                raise LangIncompleteError("'<' und einen Elementtyp")
             raise LangSyntaxError("List benötigt einen Elementtyp")
         if name != "List" and argument is not None:
             raise LangSyntaxError(f"Nur List darf einen Typparameter besitzen, nicht {name}")
         return TypeRef(name, argument)
 
     def parse_expression(self, minimum: int = 0) -> Expr:
+        start = self.current.offset
         left = self.parse_prefix()
         left = self.parse_postfix(left)
         while True:
@@ -110,7 +124,7 @@ class Parser:
             self.advance()
             right = self.parse_expression(precedence + 1)
             left = Binary(operator, left, right)
-        return left
+        return replace(left, span=SourceSpan(start, self.current.offset))
 
     def parse_prefix(self) -> Expr:
         token = self.current
@@ -190,7 +204,8 @@ class Parser:
         if self.allow_incomplete and token.kind in {"EOF", "PARTIAL_STRING"}:
             raise LangIncompleteError("einen Ausdruck")
         raise LangSyntaxError(
-            f"Ausdruck erwartet an Position {token.offset}, gefunden {token.value or token.kind!r}"
+            f"Ausdruck erwartet, gefunden {token.value or token.kind!r}",
+            token.offset, token.offset + max(1, len(token.value)),
         )
 
     def parse_postfix(self, value: Expr) -> Expr:

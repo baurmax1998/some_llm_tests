@@ -38,7 +38,9 @@ def lex(source: str, allow_incomplete: bool = False) -> list[Token]:
                 tokens.append(Token("PARTIAL_OP", remainder, position))
                 position = len(source)
                 break
-            raise LangSyntaxError(f"Unerwartetes Zeichen {source[position]!r} an Position {position}")
+            raise LangSyntaxError(
+                f"Unerwartetes Zeichen {source[position]!r}", position, position + 1
+            )
         kind = match.lastgroup or ""
         value = match.group()
         if kind not in {"SPACE", "COMMENT"}:
@@ -46,7 +48,7 @@ def lex(source: str, allow_incomplete: bool = False) -> list[Token]:
                 try:
                     value = json.loads(value)
                 except json.JSONDecodeError as exc:
-                    raise LangSyntaxError(f"Ungültiger String an Position {position}") from exc
+                    raise LangSyntaxError("Ungültiger String", position, match.end()) from exc
             elif kind == "PUNCT":
                 kind = value
             tokens.append(Token(kind, value, position))

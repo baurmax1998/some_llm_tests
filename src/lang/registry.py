@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable
 from .errors import LangNameError
-from .types import FunctionType
+from .types import FunctionType, clone_type
 
 
 @dataclass(frozen=True)
@@ -34,6 +34,17 @@ class ModuleRegistry:
     def resolve(self, symbol: str, origin: tuple[str, ...]) -> ExternalFunction:
         path = (symbol, *origin)
         try:
-            return self._functions[path]
+            external = self._functions[path]
         except KeyError as exc:
             raise LangNameError(f"Unbekannte externe Funktion {'::'.join(path)}") from exc
+        # Generische Typvariablen einer Signatur dürfen sich nicht zwischen
+        # unabhängigen Aufrufen gegenseitig festlegen.
+        return ExternalFunction(
+            external.symbol,
+            external.origin,
+            clone_type(external.type),
+            external.implementation,
+        )
+
+    def paths(self) -> tuple[tuple[str, ...], ...]:
+        return tuple(sorted(self._functions))

@@ -1,7 +1,13 @@
 """Abstrakter Syntaxbaum der Zielsprache."""
 from __future__ import annotations
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
+
+
+@dataclass(frozen=True)
+class SourceSpan:
+    start: int
+    end: int
 
 
 @dataclass(frozen=True)
@@ -11,7 +17,8 @@ class TypeRef:
 
 
 @dataclass(frozen=True)
-class Expr: pass
+class Expr:
+    span: SourceSpan | None = field(default=None, kw_only=True)
 
 
 @dataclass(frozen=True)
@@ -89,6 +96,7 @@ class Binding:
     value: Expr
     annotation: TypeRef | None = None
     is_goal: bool = False
+    span: SourceSpan | None = field(default=None, kw_only=True)
 
 
 @dataclass(frozen=True)

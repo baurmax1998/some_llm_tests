@@ -7,6 +7,7 @@ from . import ast
 from .checker import CheckedProgram
 from .errors import LangRuntimeError
 from .registry import ModuleRegistry
+from .types import FunctionType, ListType, Primitive, RecordType, Type, TypeVariable, format_type, prune
 
 
 @dataclass(frozen=True)
@@ -37,6 +38,7 @@ class Evaluator:
         self.active.add(name)
         try:
             value = self.evaluate(self.definitions[name], {})
+            validate_runtime_value(value, self.checked.bindings[name], name)
             self.values[name] = value
             return value
         finally:
@@ -97,6 +99,39 @@ class Evaluator:
             if expression.name == "fold": return reduce(arguments[1], values, arguments[0])
             raise LangRuntimeError(f"Unbekannte Methode {expression.name!r}")
         raise AssertionError(type(expression))  # pragma: no cover
+
+
+def validate_runtime_value(value: Any, expected: Type, context: str = "value") -> None:
+    """Prüft insbesondere untypisierte Werte aus externen Funktionen."""
+    expected = prune(expected)
+    valid = True
+    if isinstance(expected, Primitive):
+        if expected.name == "Bool":
+            valid = type(value) is bool
+        elif expected.name == "Int":
+            valid = type(value) is int
+        elif expected.name == "String":
+            valid = isinstance(value, str)
+    elif isinstance(expected, ListType):
+        valid = isinstance(value, list)
+        if valid:
+            for index, item in enumerate(value):
+                validate_runtime_value(item, expected.element, f"{context}[{index}]")
+    elif isinstance(expected, RecordType):
+        valid = isinstance(value, dict)
+        if valid:
+            for name, field_type in expected.fields.items():
+                if name not in value:
+                    raise LangRuntimeError(f"{context}: erforderliches Feld {name!r} fehlt")
+                validate_runtime_value(value[name], field_type, f"{context}.{name}")
+    elif isinstance(expected, FunctionType):
+        valid = callable(value)
+    elif isinstance(expected, TypeVariable):  # defensiv; der Checker lehnt dies vorher ab
+        valid = True
+    if not valid:
+        raise LangRuntimeError(
+            f"{context}: Laufzeitwert passt nicht zu {format_type(expected)}"
+        )
 
 
 def execute(checked: CheckedProgram, registry: ModuleRegistry | None = None) -> ExecutionResult:

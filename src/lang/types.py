@@ -32,6 +32,7 @@ class ListType(Type):
 class RecordType(Type):
     name: str | None
     fields: dict[str, Type] = field(default_factory=dict)
+    closed: bool = False
 
 
 @dataclass
@@ -91,7 +92,7 @@ def unify(left: Type, right: Type, context: str = "") -> Type:
         for name in shared:
             unify(left.fields[name], right.fields[name], f"Feld {name}")
         if left.name:
-            missing = set(left.fields) - set(right.fields) if right.name is None else set()
+            missing = set(left.fields) - set(right.fields) if right.closed else set()
             if missing:
                 raise LangTypeError(f"Record fehlt Feld {sorted(missing)[0]!r}{_at(context)}")
             for name, value in right.fields.items():
@@ -103,6 +104,29 @@ def unify(left: Type, right: Type, context: str = "") -> Type:
             raise LangTypeError(f"Unterschiedliche Record-Felder{_at(context)}")
         return left
     raise LangTypeError(f"Typkonflikt: {format_type(left)} und {format_type(right)}{_at(context)}")
+
+
+def clone_type(type_: Type, variables: dict[int, TypeVariable] | None = None) -> Type:
+    """Kopiert eine Signatur, damit jede externe Verwendung frisch typisiert wird."""
+    variables = {} if variables is None else variables
+    type_ = prune(type_)
+    if isinstance(type_, Primitive):
+        return type_
+    if isinstance(type_, TypeVariable):
+        return variables.setdefault(type_.identifier, TypeVariable(type_.identifier))
+    if isinstance(type_, ListType):
+        return ListType(clone_type(type_.element, variables))
+    if isinstance(type_, RecordType):
+        return RecordType(type_.name, {
+            name: clone_type(field_type, variables)
+            for name, field_type in type_.fields.items()
+        }, type_.closed)
+    if isinstance(type_, FunctionType):
+        return FunctionType(
+            [clone_type(parameter, variables) for parameter in type_.parameters],
+            clone_type(type_.result, variables),
+        )
+    raise TypeError(type_)
 
 
 def format_type(type_: Type) -> str:

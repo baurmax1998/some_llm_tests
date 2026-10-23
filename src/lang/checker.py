@@ -2,6 +2,7 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from . import ast
+from .dependencies import check_definition_order, check_dependency_cycles
 from .errors import LangNameError, LangTypeError
 from .registry import ModuleRegistry
 from .types import (
@@ -44,16 +45,54 @@ class TypeChecker:
         return self.records.setdefault(reference.name, RecordType(reference.name))
 
     def check(self, program: ast.Program) -> CheckedProgram:
+        check_definition_order(program)
+        check_dependency_cycles(program)
+        # Deklarationsannotationen werden absichtlich noch nicht angewandt:
+        # Frühere Verwendungen dürfen den Typ zuerst festlegen. So kann eine
+        # spätere, redundante Annotation zuverlässig erkannt werden.
         for binding in program.bindings:
-            self.bindings[binding.name] = (
-                self.from_ref(binding.annotation) if binding.annotation else self.fresh()
-            )
+            self.bindings[binding.name] = self.fresh()
         for binding in program.bindings:
-            inferred = self.infer(binding.value, self.bindings, self.bindings[binding.name])
-            unify(self.bindings[binding.name], inferred, binding.name)
+            try:
+                expected = self.bindings[binding.name]
+                if binding.annotation is not None:
+                    declared = self.from_ref(binding.annotation)
+                    existing = prune(expected)
+                    if (
+                        self.is_fully_resolved(existing)
+                        and format_type(existing) == format_type(declared)
+                    ):
+                        raise LangTypeError(
+                            f"Redundante Typannotation bei {binding.name!r}; "
+                            f"der Typ {format_type(existing)} wurde bereits festgelegt"
+                        )
+                    unify(expected, declared, binding.name)
+                inferred = self.infer(binding.value, self.bindings, expected)
+                unify(expected, inferred, binding.name)
+            except (LangNameError, LangTypeError) as exc:
+                span = binding.value.span
+                if span is not None:
+                    exc.attach(span.start, span.end)
+                raise
         for name, type_ in self.bindings.items():
             self.require_resolved(type_, name, set())
         return CheckedProgram(program, dict(self.bindings), dict(self.records))
+
+    def is_fully_resolved(self, type_: Type, seen: set[int] | None = None) -> bool:
+        seen = set() if seen is None else seen
+        type_ = prune(type_)
+        if id(type_) in seen:
+            return True
+        seen.add(id(type_))
+        if isinstance(type_, TypeVariable):
+            return False
+        if isinstance(type_, ListType):
+            return self.is_fully_resolved(type_.element, seen)
+        if isinstance(type_, FunctionType):
+            return all(self.is_fully_resolved(item, seen) for item in [*type_.parameters, type_.result])
+        if isinstance(type_, RecordType):
+            return all(self.is_fully_resolved(item, seen) for item in type_.fields.values())
+        return True
 
     def require_resolved(self, type_: Type, context: str, seen: set[int]) -> None:
         type_ = prune(type_)
@@ -101,7 +140,7 @@ class TypeChecker:
                 )
                 for name, value in expression.fields
             }
-            result = RecordType(None, fields)
+            result = RecordType(None, fields, closed=True)
         elif isinstance(expression, ast.Unary):
             wanted = BOOL if expression.operator == "not" else INT
             self.infer(expression.operand, scope, wanted)
@@ -122,6 +161,8 @@ class TypeChecker:
                 owner = record
             if not isinstance(owner, RecordType):
                 raise LangTypeError(f"Feldzugriff .{expression.name} auf {format_type(owner)}")
+            if owner.closed and expression.name not in owner.fields:
+                raise LangTypeError(f"Record besitzt kein Feld {expression.name!r}")
             result = owner.fields.setdefault(expression.name, self.fresh())
         elif isinstance(expression, ast.Lambda):
             expected_function = prune(expected) if expected is not None else None

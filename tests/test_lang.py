@@ -1,7 +1,7 @@
 import pytest
 
 from src.lang import (
-    INT, STRING, FunctionType, LangRuntimeError, LangTypeError, ListType,
+    INT, STRING, FunctionType, LangDependencyError, LangTypeError, ListType,
     ModuleRegistry, RecordType, compile_program, run,
 )
 
@@ -9,10 +9,10 @@ from src.lang import (
 def test_forward_definitions_are_evaluated_by_dependency():
     source = """
     goal total: Int = paintable_area * price
-    let paintable_area: Int = wall_area - window_area
-    let wall_area: Int = 6 * 3
-    let window_area: Int = 2 * 1
-    let price: Int = 1200
+    let paintable_area = wall_area - window_area
+    let wall_area = 6 * 3
+    let window_area = 2 * 1
+    let price = 1200
     """
     assert run(source).value == 19200
 
@@ -82,10 +82,10 @@ def test_contradicting_field_requirement_is_rejected():
         compile_program(source)
 
 
-def test_dependency_cycle_is_rejected_at_runtime():
+def test_dependency_cycle_is_rejected_during_checking():
     source = """
     goal first: Int = second + 1
     let second: Int = first + 1
     """
-    with pytest.raises(LangRuntimeError, match="Abhängigkeitszyklus"):
+    with pytest.raises(LangDependencyError, match="Abhängigkeitszyklus"):
         run(source)
