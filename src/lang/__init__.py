@@ -1,7 +1,11 @@
 """Parser, Typprüfung und Laufzeit der zielorientierten Sprache."""
 from .ast import Program
 from .checker import CheckedProgram, TypeChecker, check
-from .errors import LangError, LangNameError, LangRuntimeError, LangSyntaxError, LangTypeError
+from .errors import (
+    LangError, LangIncompleteError, LangNameError, LangRuntimeError,
+    LangSyntaxError, LangTypeError,
+)
+from .incremental import LangPrefixState, PrefixCheck, PrefixStatus, check_prefix
 from .parser import Parser, parse
 from .registry import ExternalFunction, ModuleRegistry
 from .runtime import ExecutionResult, Evaluator, execute
@@ -21,8 +25,9 @@ def run(source: str, registry: ModuleRegistry | None = None) -> ExecutionResult:
 
 __all__ = [
     "BOOL", "INT", "STRING", "CheckedProgram", "Evaluator", "ExecutionResult",
-    "ExternalFunction", "FunctionType", "LangError", "LangNameError",
-    "LangRuntimeError", "LangSyntaxError", "LangTypeError", "ListType",
-    "ModuleRegistry", "Parser", "Program", "RecordType", "TypeChecker", "check",
-    "compile_program", "execute", "format_type", "parse", "run",
+    "ExternalFunction", "FunctionType", "LangError", "LangIncompleteError",
+    "LangNameError", "LangPrefixState", "LangRuntimeError", "LangSyntaxError",
+    "LangTypeError", "ListType", "ModuleRegistry", "Parser", "PrefixCheck",
+    "PrefixStatus", "Program", "RecordType", "TypeChecker", "check",
+    "check_prefix", "compile_program", "execute", "format_type", "parse", "run",
 ]

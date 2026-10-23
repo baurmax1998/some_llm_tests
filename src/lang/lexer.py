@@ -21,12 +21,23 @@ _PATTERN = re.compile(
 )
 
 
-def lex(source: str) -> list[Token]:
+def lex(source: str, allow_incomplete: bool = False) -> list[Token]:
     tokens: list[Token] = []
     position = 0
     while position < len(source):
         match = _PATTERN.match(source, position)
         if not match:
+            remainder = source[position:]
+            if allow_incomplete and source[position] == '"':
+                # Ein noch nicht geschlossenes Stringliteral ist während der
+                # inkrementellen Eingabe ein gültiges Präfix.
+                tokens.append(Token("PARTIAL_STRING", remainder, position))
+                position = len(source)
+                break
+            if allow_incomplete and remainder == "!":
+                tokens.append(Token("PARTIAL_OP", remainder, position))
+                position = len(source)
+                break
             raise LangSyntaxError(f"Unerwartetes Zeichen {source[position]!r} an Position {position}")
         kind = match.lastgroup or ""
         value = match.group()

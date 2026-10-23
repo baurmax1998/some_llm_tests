@@ -4,7 +4,7 @@ from .ast import (
     Annotation, Binary, Binding, Call, Expr, Field, IfExpr, Lambda, ListExpr,
     Literal, MethodCall, Name, Program, RecordExpr, TypeRef, Unary,
 )
-from .errors import LangSyntaxError
+from .errors import LangIncompleteError, LangSyntaxError
 from .lexer import Token, lex
 
 
@@ -13,8 +13,9 @@ _PRECEDENCE = {"or": 1, "and": 2, "==": 3, "!=": 3, "<": 3, "<=": 3,
 
 
 class Parser:
-    def __init__(self, source: str):
-        self.tokens = lex(source)
+    def __init__(self, source: str, allow_incomplete: bool = False):
+        self.allow_incomplete = allow_incomplete
+        self.tokens = lex(source, allow_incomplete=allow_incomplete)
         self.index = 0
 
     @property
@@ -35,6 +36,17 @@ class Parser:
     def expect(self, kind: str, value: str | None = None) -> Token:
         if not self.match(kind, value):
             wanted = value if value is not None else kind
+            if self.allow_incomplete and self.current.kind == "EOF":
+                raise LangIncompleteError(repr(wanted))
+            if (
+                self.allow_incomplete
+                and value is not None
+                and self.current.kind == kind
+                and value.startswith(self.current.value)
+                and self.index + 1 < len(self.tokens)
+                and self.tokens[self.index + 1].kind == "EOF"
+            ):
+                raise LangIncompleteError(repr(value))
             raise LangSyntaxError(
                 f"Erwartet {wanted!r} an Position {self.current.offset}, "
                 f"gefunden {self.current.value or self.current.kind!r}"
@@ -46,6 +58,12 @@ class Parser:
         while self.current.kind != "EOF":
             keyword = self.expect("NAME").value
             if keyword not in {"goal", "let"}:
+                if (
+                    self.allow_incomplete
+                    and any(candidate.startswith(keyword) for candidate in ("goal", "let"))
+                    and self.current.kind == "EOF"
+                ):
+                    raise LangIncompleteError("'goal' oder 'let'")
                 raise LangSyntaxError(f"Erwartet 'goal' oder 'let', gefunden {keyword!r}")
             name = self.expect("NAME").value
             annotation = None
@@ -56,6 +74,8 @@ class Parser:
             bindings.append(Binding(name, value, annotation, keyword == "goal"))
         goals = sum(binding.is_goal for binding in bindings)
         if goals != 1:
+            if self.allow_incomplete and goals == 0:
+                raise LangIncompleteError("eine goal-Definition")
             raise LangSyntaxError("Ein Programm muss genau ein goal enthalten")
         names = [binding.name for binding in bindings]
         duplicate = next((name for name in names if names.count(name) > 1), None)
@@ -79,6 +99,10 @@ class Parser:
         left = self.parse_prefix()
         left = self.parse_postfix(left)
         while True:
+            if self.allow_incomplete and self.current.kind == "PARTIAL_OP":
+                raise LangIncompleteError("'!='")
+            if self.allow_incomplete and self.current.kind == "=":
+                raise LangIncompleteError("'=='")
             operator = self.current.value
             precedence = _PRECEDENCE.get(operator, -1)
             if precedence < minimum:
@@ -116,6 +140,13 @@ class Parser:
             self.advance()
             if self.match("ARROW"):
                 return Lambda((token.value,), self.parse_expression())
+            if (
+                self.allow_incomplete
+                and self.current.kind == "="
+                and self.index + 1 < len(self.tokens)
+                and self.tokens[self.index + 1].kind == "EOF"
+            ):
+                raise LangIncompleteError("'=>'")
             origin: list[str] = []
             while self.match("ORIGIN"):
                 origin.append(self.expect("NAME").value)
@@ -156,6 +187,8 @@ class Parser:
                 value = Annotation(value, self.parse_type())
             self.expect(")")
             return value
+        if self.allow_incomplete and token.kind in {"EOF", "PARTIAL_STRING"}:
+            raise LangIncompleteError("einen Ausdruck")
         raise LangSyntaxError(
             f"Ausdruck erwartet an Position {token.offset}, gefunden {token.value or token.kind!r}"
         )
