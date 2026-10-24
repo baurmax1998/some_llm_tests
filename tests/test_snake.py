@@ -22,6 +22,10 @@ def test_controller_supports_commands_and_errors():
 
     assert controller.execute({"command": "start"})["state"]["status"] == "running"
     assert controller.execute("up")["direction_accepted"] is True
+    screenshot = controller.execute("screenshot")
+    assert screenshot["ok"] is True
+    assert "@" in screenshot["screenshot"]
+    assert "*" in screenshot["screenshot"]
     assert controller.execute({"command": "unknown"})["ok"] is False
     assert controller.execute("quit")["ok"] is True
     assert stop_event.is_set()

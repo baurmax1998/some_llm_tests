@@ -11,7 +11,6 @@ zulässig.
 
 from __future__ import annotations
 
-import argparse
 import curses
 import json
 import random
@@ -40,7 +39,7 @@ HELP = {
     },
     "tcp": {
         "format": "eine JSON-Anfrage je Zeile; alternativ einfacher Textbefehl",
-        "commands": ["start", "pause", "reset", "up", "down", "left", "right", "state", "help", "quit"],
+        "commands": ["start", "pause", "reset", "up", "down", "left", "right", "state", "screenshot", "help", "quit"],
         "examples": [
             {"command": "start"},
             {"command": "direction", "direction": "up"},
@@ -135,10 +134,31 @@ class SnakeGame:
                 "score": self.score,
                 "width": self.config.width,
                 "height": self.config.height,
+                "tick_seconds": self.config.tick_seconds,
                 "direction": self.direction,
                 "snake": [[x, y] for x, y in self.snake],
                 "food": list(self.food) if self.food is not None else None,
             }
+
+    def ascii_snapshot(self) -> str:
+        """Liefert dieselbe Spielfeldansicht wie die Konsole als Text."""
+        state = self.snapshot()
+        width, height = state["width"], state["height"]
+        snake = {tuple(point) for point in state["snake"]}
+        head = tuple(state["snake"][0])
+        food = tuple(state["food"]) if state["food"] is not None else None
+        lines = [
+            f"SNAKE  Punkte: {state['score']}  Status: {state['status']}  Richtung: {state['direction']}  Tick: {state['tick_seconds']:.3f}s",
+            "+" + "-" * width + "+",
+        ]
+        for y in range(height):
+            cells = []
+            for x in range(width):
+                point = (x, y)
+                cells.append("@" if point == head else "o" if point in snake else "*" if point == food else " ")
+            lines.append("|" + "".join(cells) + "|")
+        lines.append("+" + "-" * width + "+")
+        return "\n".join(lines)
 
     def _place_food(self) -> None:
         free = [
@@ -188,6 +208,8 @@ class SnakeController:
                 return self._ok()
             if command == "state":
                 return self._ok()
+            if command == "screenshot":
+                return {"ok": True, "screenshot": self.game.ascii_snapshot(), "state": self.game.snapshot()}
             if command == "help":
                 return {"ok": True, "help": HELP, "state": self.game.snapshot()}
             if command == "quit":
@@ -263,7 +285,7 @@ def _draw(screen: Any, state: dict[str, Any], host: str, port: int, show_help: b
             "Pfeile oder WASD: steuern",
             "Leertaste/Enter: starten/weiter, p: Pause, r: Neustart, q: Ende",
             f"TCP auf {host}:{port}; pro Zeile JSON oder Text, z.B. {{\"command\":\"left\"}}",
-            "Befehle: start pause reset up down left right state help quit",
+            "Befehle: start pause reset up down left right state screenshot help quit",
             "Beliebige Taste schließt diese Hilfe.",
         ]
         box_width = min(max(map(len, lines)) + 4, cols - 2)
@@ -315,34 +337,23 @@ def _run_ui(screen: Any, game: SnakeGame, controller: SnakeController, host: str
         time.sleep(0.01)
 
 
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="ASCII-Snake mit lokaler TCP-API")
-    parser.add_argument("--host", default="127.0.0.1", help="TCP-Bind-Adresse (Standard: nur lokal)")
-    parser.add_argument("--port", type=int, default=8765, help="TCP-Port")
-    parser.add_argument("--width", type=int, default=30, help="Spielfeldbreite")
-    parser.add_argument("--height", type=int, default=18, help="Spielfeldhöhe")
-    parser.add_argument("--speed", type=float, default=0.20, help="Sekunden pro Spielschritt (größer = langsamer)")
-    return parser
-
-
-def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+def main() -> int:
+    host = "127.0.0.1"
+    port = 8765
     try:
-        config = GameConfig(args.width, args.height, args.speed)
-        game = SnakeGame(config)
+        game = SnakeGame(GameConfig())
         stop_event = threading.Event()
         controller = SnakeController(game, stop_event)
-        server = SnakeTCPServer((args.host, args.port), controller)
+        server = SnakeTCPServer((host, port), controller)
     except (ValueError, OSError) as exc:
         print(f"Snake konnte nicht gestartet werden: {exc}")
         return 2
 
-    # Bei Port 0 teilt das Betriebssystem einen freien Port zu.
     actual_port = int(server.server_address[1])
     server_thread = threading.Thread(target=server.serve_forever, name="snake-tcp", daemon=True)
     server_thread.start()
     try:
-        curses.wrapper(_run_ui, game, controller, args.host, actual_port)
+        curses.wrapper(_run_ui, game, controller, host, actual_port)
     except KeyboardInterrupt:
         stop_event.set()
     finally:

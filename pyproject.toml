@@ -25,11 +25,15 @@ dev = ["pytest==8.4.2"]
 
 [project.scripts]
 sic = "src.cli:main"
-sic-snake = "src.games.snake:main"
+snake = "src.games.snake:main"
+gamer = "src.games.gamer:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["src", "src.*"]
+
+[tool.setuptools.package-data]
+"src.games" = ["*.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
