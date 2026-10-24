@@ -119,3 +119,11 @@ bzw. ohne KV-Cache läuft über:
 ```bash
 pytest -q -s tests/test_gamer_cache_performance.py
 ```
+
+Ein separater Fähigkeitstest lässt das echte Modell ohne Zeitdruck zehn feste
+Snake-Positionen lösen. Er prüft Decoderformat, Kollisionen und Fortschritt zum
+Futter und schlägt fehl, sobald eine Position nicht korrekt gelöst wird:
+
+```bash
+pytest -q -s tests/test_gamer_llm_positions.py
+```
