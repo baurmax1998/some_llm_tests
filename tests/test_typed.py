@@ -1,5 +1,6 @@
 """Echte lokale End-to-End-Läufe mit aus Pydantic abgeleiteten Schemata."""
 import json
+import time
 from enum import Enum
 
 import pytest
@@ -83,8 +84,24 @@ def run_local_example(
     max_new_tokens=128,
     show_detail_logprobs: bool = False,
 ):
+    total_started = time.perf_counter()
+
+    started = time.perf_counter()
     schema = schema_from_pydantic(model_type)
+    schema_seconds = time.perf_counter() - started
+
+    started = time.perf_counter()
     constraint = OutlinesSchemaConstraint(schema, backend.tokenizer, backend.vocab_size)
+    constraint_seconds = time.perf_counter() - started
+
+    generation_started = time.perf_counter()
+    first_token_seconds = None
+
+    def record_first_token(_trace):
+        nonlocal first_token_seconds
+        if first_token_seconds is None:
+            first_token_seconds = time.perf_counter() - generation_started
+
     result = generate(
         backend=backend,
         constraint=constraint,
@@ -94,9 +111,14 @@ def run_local_example(
         top_p=1,
         seed=0,
         max_new_tokens=max_new_tokens,
+        on_step=record_first_token,
     )
+    generation_seconds = time.perf_counter() - generation_started
     assert result.status == "abgeschlossen", result.error or result.text
+
+    started = time.perf_counter()
     value = json.loads(result.text)
+    json_seconds = time.perf_counter() - started
     assert result.validation == {
         "json": True,
         "jsonschema": True,
@@ -105,12 +127,43 @@ def run_local_example(
     assert result.steps
     print("\nGeneriertes JSON:")
     print(json.dumps(value, ensure_ascii=False, indent=2))
+
+    started = time.perf_counter()
     analyses = analyze_value_probabilities(
         result, schema, include_token_details=show_detail_logprobs
     )
+    analysis_seconds = time.perf_counter() - started
     print(format_value_probabilities(analyses))
+
+    started = time.perf_counter()
+    typed_value = model_type.model_validate(value)
+    pydantic_seconds = time.perf_counter() - started
+    total_seconds = time.perf_counter() - total_started
+
+    model_seconds = sum(step.model_seconds for step in result.steps)
+    mask_seconds = sum(step.mask_seconds for step in result.steps)
+    other_generation_seconds = max(
+        0.0, generation_seconds - model_seconds - mask_seconds
+    )
+    token_count = len(result.steps)
+    print(f"\nTiming für {model_type.__name__} ({token_count} Tokens):")
+    print(f"  Schema aus Pydantic:       {schema_seconds:8.3f} s")
+    print(f"  Constraint initialisieren: {constraint_seconds:8.3f} s")
+    print(f"  Zeit bis zum ersten Token: {first_token_seconds or 0.0:8.3f} s")
+    print(f"  Modell-Inferenz gesamt:    {model_seconds:8.3f} s")
+    print(f"    davon Prompt-Prefill:     {result.steps[0].model_seconds:8.3f} s")
+    print(f"    davon weitere Tokens:     {model_seconds - result.steps[0].model_seconds:8.3f} s")
+    print(f"  Schema-Masken gesamt:      {mask_seconds:8.3f} s")
+    print(f"  Sonstige Generierung:      {other_generation_seconds:8.3f} s")
+    print(f"  Generierung gesamt:        {generation_seconds:8.3f} s")
+    print(f"  JSON parsen:               {json_seconds:8.3f} s")
+    print(f"  Wahrscheinlichkeitsanalyse:{analysis_seconds:8.3f} s")
+    print(f"  Pydantic validieren:       {pydantic_seconds:8.3f} s")
+    print(f"  Gesamtlauf:                {total_seconds:8.3f} s")
+    print(f"  Durchsatz:                 {token_count / generation_seconds:8.2f} Token/s")
+
     # Nur das typisierte Pydantic-Objekt an den Test zurückgeben.
-    return model_type.model_validate(value)
+    return typed_value
 
 
 @pytest.mark.integration

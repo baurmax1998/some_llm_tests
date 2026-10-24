@@ -25,6 +25,7 @@ dev = ["pytest==8.4.2"]
 
 [project.scripts]
 sic = "src.cli:main"
+sic-snake = "src.games.snake:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
