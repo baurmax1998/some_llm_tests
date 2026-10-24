@@ -1,0 +1,68 @@
+================================================================================
+[2026-10-24T21:28:43.740030+00:00 | +0.000s] RUN_STARTED
+
+host:
+127.0.0.1
+
+port:
+8765
+
+model:
+mlx-community/Qwen3-8B-4bit
+
+output_format:
+compact
+
+screenshot_mode:
+coordinates
+
+pause_during_inference:
+True
+
+prompt_file:
+/Users/ba22036/PycharmProjects/lokal_llm/src/games/snake_gamer.md
+
+system_prompt:
+# Snake-Gamer
+
+Steuere Snake zum Futter, ohne Wand oder Körper zu berühren. Der Gamer liefert
+bei jedem Zug eine konfigurierbare TCP-Ansicht und zusätzlich den strukturierten
+Abschnitt `Exakte Zustandsanalyse`. Die Koordinatenangaben sind maßgeblich.
+
+- `@` = Kopf, `o` = Körper, `*` = Futter.
+- Oben links ist `(0,0)`; X wächst nach rechts, Y nach unten.
+- Die Kopfzeile nennt aktuelle Richtung und Sekunden pro Tick.
+- Eine entgegengesetzte Richtung ist verboten.
+- Zum bewussten Geradeausfahren verwende `wait`; wiederhole nicht die aktuelle Richtung.
+- Nähert sich der Kopf in seiner Bewegungsrichtung einer Wand, biege rechtzeitig
+  in eine erlaubte Richtung ab – auch wenn das Futter woanders liegt.
+
+Der erste Plan wird erzeugt, bevor das Spiel startet. Standardmäßig pausiert der
+Gamer Snake während der Modellberechnung, damit das Spiel bei langsamer lokaler
+Inferenz nicht ohne Steuerungsmöglichkeit in eine Wand fährt. Im experimentellen
+Live-Modus läuft Snake weiter; nutze dort die Kollisionsprognose und die Dauer der
+vorherigen Antwort. Alte Screenshots im Gespräch sind überholt; entscheide
+ausschließlich anhand des neuesten Zuges.
+
+Antworte ausschließlich im anschließend beschriebenen Decoderformat. Zeit wird
+als Anzahl vollständiger Spielticks angegeben, niemals in Millisekunden. Plane
+nur die nächsten sicheren Aktionen und beende den Plan in einer Richtung mit
+mindestens `Benötigter Sicherheitskorridor` freien Ticks. `screenshot` beobachtet
+lediglich den Zustand; es startet und stoppt das Spiel nicht. Der Gamer startet
+das Spiel automatisch.
+
+Ausgabe ausschließlich als kurze Liste ohne Leerzeichen.
+Codes: u=hoch, d=runter, l=links, r=rechts, w=Richtung halten, p=Screenshot.
+Auf u/d/l/r/w folgen genau zwei Ziffern für die Anzahl Spielticks (00 bis 99), keine Millisekunden.
+p bedeutet NICHT Start; der Gamer startet automatisch. Planende ist ! Beispiel: u,01,l,03,p!
+
+
+================================================================================
+[2026-10-24T21:28:43.741268+00:00 | +0.001s] ERROR
+
+error_type:
+ConnectionRefusedError
+
+message:
+[Errno 61] Connection refused
+

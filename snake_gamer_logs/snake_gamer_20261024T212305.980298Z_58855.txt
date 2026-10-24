@@ -1,0 +1,2755 @@
+================================================================================
+[2026-10-24T21:23:05.980807+00:00 | +0.000s] RUN_STARTED
+
+host:
+127.0.0.1
+
+port:
+8765
+
+model:
+mlx-community/Qwen3-8B-4bit
+
+output_format:
+compact
+
+screenshot_mode:
+coordinates
+
+pause_during_inference:
+False
+
+prompt_file:
+/Users/ba22036/PycharmProjects/lokal_llm/src/games/snake_gamer.md
+
+system_prompt:
+# Snake-Gamer
+
+Steuere Snake zum Futter, ohne Wand oder Körper zu berühren. Der Gamer liefert
+bei jedem Zug eine konfigurierbare TCP-Ansicht und zusätzlich den strukturierten
+Abschnitt `Exakte Zustandsanalyse`. Die Koordinatenangaben sind maßgeblich.
+
+- `@` = Kopf, `o` = Körper, `*` = Futter.
+- Oben links ist `(0,0)`; X wächst nach rechts, Y nach unten.
+- Die Kopfzeile nennt aktuelle Richtung und Sekunden pro Tick.
+- Eine entgegengesetzte Richtung ist verboten.
+- Zum bewussten Geradeausfahren verwende `wait`; wiederhole nicht die aktuelle Richtung.
+- Nähert sich der Kopf in seiner Bewegungsrichtung einer Wand, biege rechtzeitig
+  in eine erlaubte Richtung ab – auch wenn das Futter woanders liegt.
+
+Der erste Plan wird erzeugt, bevor das Spiel startet. Standardmäßig pausiert der
+Gamer Snake während der Modellberechnung, damit das Spiel bei langsamer lokaler
+Inferenz nicht ohne Steuerungsmöglichkeit in eine Wand fährt. Im experimentellen
+Live-Modus läuft Snake weiter; nutze dort die Kollisionsprognose und die Dauer der
+vorherigen Antwort. Alte Screenshots im Gespräch sind überholt; entscheide
+ausschließlich anhand des neuesten Zuges.
+
+Antworte ausschließlich im anschließend beschriebenen Decoderformat. Zeit wird
+als Anzahl vollständiger Spielticks angegeben, niemals in Millisekunden. Plane
+nur die nächsten sicheren Aktionen und beende den Plan in einer Richtung mit
+mindestens `Benötigter Sicherheitskorridor` freien Ticks. `screenshot` beobachtet
+lediglich den Zustand; es startet und stoppt das Spiel nicht. Der Gamer startet
+das Spiel automatisch.
+
+Ausgabe ausschließlich als kurze Liste ohne Leerzeichen.
+Codes: u=hoch, d=runter, l=links, r=rechts, w=Richtung halten, p=Screenshot.
+Auf u/d/l/r/w folgen genau zwei Ziffern für die Anzahl Spielticks (00 bis 99), keine Millisekunden.
+p bedeutet NICHT Start; der Gamer startet automatisch. Planende ist ! Beispiel: u,01,l,03,p!
+
+
+================================================================================
+[2026-10-24T21:23:09.392027+00:00 | +3.411s] SCREENSHOT
+
+turn:
+1
+
+source:
+turn_start
+
+screenshot:
+SNAKE_COORDINATES
+status=ready
+board_width=30; board_height=18
+valid_x=0..29; valid_y=0..17
+origin=(0,0) top-left; x increases right; y increases down
+tick_seconds=0.500; tick_count=0
+direction=right
+head=(15, 9)
+body=[(14, 9), (13, 9)]
+food=(12, 2)
+
+state:
+{'status': 'ready',
+ 'score': 0,
+ 'tick_count': 0,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'right',
+ 'snake': [[15, 9], [14, 9], [13, 9]],
+ 'food': [12, 2]}
+
+================================================================================
+[2026-10-24T21:23:09.392215+00:00 | +3.411s] PROMPT
+
+turn:
+1
+
+system_prompt:
+# Snake-Gamer
+
+Steuere Snake zum Futter, ohne Wand oder Körper zu berühren. Der Gamer liefert
+bei jedem Zug eine konfigurierbare TCP-Ansicht und zusätzlich den strukturierten
+Abschnitt `Exakte Zustandsanalyse`. Die Koordinatenangaben sind maßgeblich.
+
+- `@` = Kopf, `o` = Körper, `*` = Futter.
+- Oben links ist `(0,0)`; X wächst nach rechts, Y nach unten.
+- Die Kopfzeile nennt aktuelle Richtung und Sekunden pro Tick.
+- Eine entgegengesetzte Richtung ist verboten.
+- Zum bewussten Geradeausfahren verwende `wait`; wiederhole nicht die aktuelle Richtung.
+- Nähert sich der Kopf in seiner Bewegungsrichtung einer Wand, biege rechtzeitig
+  in eine erlaubte Richtung ab – auch wenn das Futter woanders liegt.
+
+Der erste Plan wird erzeugt, bevor das Spiel startet. Standardmäßig pausiert der
+Gamer Snake während der Modellberechnung, damit das Spiel bei langsamer lokaler
+Inferenz nicht ohne Steuerungsmöglichkeit in eine Wand fährt. Im experimentellen
+Live-Modus läuft Snake weiter; nutze dort die Kollisionsprognose und die Dauer der
+vorherigen Antwort. Alte Screenshots im Gespräch sind überholt; entscheide
+ausschließlich anhand des neuesten Zuges.
+
+Antworte ausschließlich im anschließend beschriebenen Decoderformat. Zeit wird
+als Anzahl vollständiger Spielticks angegeben, niemals in Millisekunden. Plane
+nur die nächsten sicheren Aktionen und beende den Plan in einer Richtung mit
+mindestens `Benötigter Sicherheitskorridor` freien Ticks. `screenshot` beobachtet
+lediglich den Zustand; es startet und stoppt das Spiel nicht. Der Gamer startet
+das Spiel automatisch.
+
+Ausgabe ausschließlich als kurze Liste ohne Leerzeichen.
+Codes: u=hoch, d=runter, l=links, r=rechts, w=Richtung halten, p=Screenshot.
+Auf u/d/l/r/w folgen genau zwei Ziffern für die Anzahl Spielticks (00 bis 99), keine Millisekunden.
+p bedeutet NICHT Start; der Gamer startet automatisch. Planende ist ! Beispiel: u,01,l,03,p!
+
+
+user_prompt:
+AKTUELLER ZUG 1. Nur dieser Zustand ist maßgeblich.
+
+Exakte Zustandsanalyse:
+Kopf=(15,9); Richtung=right; Futter=(12,2) → 3 Felder links, 7 Felder oben.
+Freie Felder bis zur Wand: links=15, rechts=14, oben=9, unten=8.
+Sofort erlaubte Richtungen: up, down, right. LLM_DELAY_TICKS=unbekannt (erster Plan vor Spielstart).
+
+TCP-Ansicht zum selben Zeitpunkt (Modus=coordinates):
+```text
+SNAKE_COORDINATES
+status=ready
+board_width=30; board_height=18
+valid_x=0..29; valid_y=0..17
+origin=(0,0) top-left; x increases right; y increases down
+tick_seconds=0.500; tick_count=0
+direction=right
+head=(15, 9)
+body=[(14, 9), (13, 9)]
+food=(12, 2)
+```
+
+Vorher ausgeführt: Keine (erster Zug).
+Das Spiel ist noch nicht gestartet; dieser Plan wird vor dem Start erzeugt.
+
+Wähle eine Richtung zum Futter, aber vermeide zuerst die Wand. Wenn du bewusst
+geradeaus weiterfahren willst, verwende `w`/`wait` statt die aktuelle Richtung
+noch einmal auszugeben. Bei Kollisionsprognose musst du jetzt eine andere
+erlaubte Richtung wählen. `p`/`screenshot` beobachtet nur
+und startet das Spiel nicht. Antworte exakt im vorgegebenen Ausgabeformat.
+
+
+================================================================================
+[2026-10-24T21:23:15.579296+00:00 | +9.598s] LLM_RESPONSE
+
+turn:
+1
+
+inference_seconds:
+6.186983500025235
+
+generation_metrics:
+{'cache_reused': False,
+ 'cache_status': 'processed,response_tokens,prepared_chat',
+ 'prompt_tokens_processed': 969,
+ 'generated_tokens': 9,
+ 'model_seconds': 5.755218791950028,
+ 'mask_seconds': 0.00021820690017193556}
+
+raw_response:
+u,01,r,07!
+
+actions:
+[{'command': 'up', 'ticks': 1}, {'command': 'right', 'ticks': 7}]
+
+================================================================================
+[2026-10-24T21:23:15.579785+00:00 | +9.599s] SAFETY_CHECK
+
+turn:
+1
+
+required_runway_ticks:
+15
+
+original_actions:
+[{'command': 'up', 'ticks': 1}, {'command': 'right', 'ticks': 7}]
+
+safe_actions:
+[{'command': 'up', 'ticks': 1}, {'command': 'right', 'ticks': 7}, {'command': 'down', 'ticks': 1}]
+
+adjustments:
+['Sicherheitsabbiegung down, weil Endkorridor 7 < benötigte 15 Ticks (neuer Korridor 8)']
+
+live_state:
+{'status': 'ready',
+ 'score': 0,
+ 'tick_count': 0,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'right',
+ 'snake': [[15, 9], [14, 9], [13, 9]],
+ 'food': [12, 2]}
+
+================================================================================
+[2026-10-24T21:23:15.580138+00:00 | +9.599s] GAME_STARTED
+
+turn:
+1
+
+state:
+{'status': 'running',
+ 'score': 0,
+ 'tick_count': 0,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'right',
+ 'snake': [[15, 9], [14, 9], [13, 9]],
+ 'food': [12, 2]}
+
+================================================================================
+[2026-10-24T21:23:15.687674+00:00 | +9.707s] ACTION
+
+turn:
+1
+
+index:
+0
+
+command:
+up
+
+requested_ticks:
+1
+
+ticks:
+1
+
+direction_accepted:
+True
+
+state:
+{'status': 'running',
+ 'score': 0,
+ 'tick_count': 1,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'up',
+ 'snake': [[15, 8], [15, 9], [14, 9]],
+ 'food': [12, 2]}
+
+================================================================================
+[2026-10-24T21:23:19.207058+00:00 | +13.226s] ACTION
+
+turn:
+1
+
+index:
+1
+
+command:
+right
+
+requested_ticks:
+7
+
+ticks:
+7
+
+direction_accepted:
+True
+
+state:
+{'status': 'running',
+ 'score': 0,
+ 'tick_count': 8,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'right',
+ 'snake': [[22, 8], [21, 8], [20, 8]],
+ 'food': [12, 2]}
+
+================================================================================
+[2026-10-24T21:23:19.752891+00:00 | +13.772s] ACTION
+
+turn:
+1
+
+index:
+2
+
+command:
+down
+
+requested_ticks:
+1
+
+ticks:
+1
+
+direction_accepted:
+True
+
+state:
+{'status': 'running',
+ 'score': 0,
+ 'tick_count': 9,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'down',
+ 'snake': [[22, 9], [22, 8], [21, 8]],
+ 'food': [12, 2]}
+
+================================================================================
+[2026-10-24T21:23:19.755783+00:00 | +13.775s] SCREENSHOT
+
+turn:
+2
+
+source:
+turn_start
+
+screenshot:
+SNAKE_COORDINATES
+status=running
+board_width=30; board_height=18
+valid_x=0..29; valid_y=0..17
+origin=(0,0) top-left; x increases right; y increases down
+tick_seconds=0.500; tick_count=9
+direction=down
+head=(22, 9)
+body=[(22, 8), (21, 8)]
+food=(12, 2)
+
+state:
+{'status': 'running',
+ 'score': 0,
+ 'tick_count': 9,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'down',
+ 'snake': [[22, 9], [22, 8], [21, 8]],
+ 'food': [12, 2]}
+
+================================================================================
+[2026-10-24T21:23:19.756320+00:00 | +13.776s] PROMPT
+
+turn:
+2
+
+system_prompt:
+# Snake-Gamer
+
+Steuere Snake zum Futter, ohne Wand oder Körper zu berühren. Der Gamer liefert
+bei jedem Zug eine konfigurierbare TCP-Ansicht und zusätzlich den strukturierten
+Abschnitt `Exakte Zustandsanalyse`. Die Koordinatenangaben sind maßgeblich.
+
+- `@` = Kopf, `o` = Körper, `*` = Futter.
+- Oben links ist `(0,0)`; X wächst nach rechts, Y nach unten.
+- Die Kopfzeile nennt aktuelle Richtung und Sekunden pro Tick.
+- Eine entgegengesetzte Richtung ist verboten.
+- Zum bewussten Geradeausfahren verwende `wait`; wiederhole nicht die aktuelle Richtung.
+- Nähert sich der Kopf in seiner Bewegungsrichtung einer Wand, biege rechtzeitig
+  in eine erlaubte Richtung ab – auch wenn das Futter woanders liegt.
+
+Der erste Plan wird erzeugt, bevor das Spiel startet. Standardmäßig pausiert der
+Gamer Snake während der Modellberechnung, damit das Spiel bei langsamer lokaler
+Inferenz nicht ohne Steuerungsmöglichkeit in eine Wand fährt. Im experimentellen
+Live-Modus läuft Snake weiter; nutze dort die Kollisionsprognose und die Dauer der
+vorherigen Antwort. Alte Screenshots im Gespräch sind überholt; entscheide
+ausschließlich anhand des neuesten Zuges.
+
+Antworte ausschließlich im anschließend beschriebenen Decoderformat. Zeit wird
+als Anzahl vollständiger Spielticks angegeben, niemals in Millisekunden. Plane
+nur die nächsten sicheren Aktionen und beende den Plan in einer Richtung mit
+mindestens `Benötigter Sicherheitskorridor` freien Ticks. `screenshot` beobachtet
+lediglich den Zustand; es startet und stoppt das Spiel nicht. Der Gamer startet
+das Spiel automatisch.
+
+Ausgabe ausschließlich als kurze Liste ohne Leerzeichen.
+Codes: u=hoch, d=runter, l=links, r=rechts, w=Richtung halten, p=Screenshot.
+Auf u/d/l/r/w folgen genau zwei Ziffern für die Anzahl Spielticks (00 bis 99), keine Millisekunden.
+p bedeutet NICHT Start; der Gamer startet automatisch. Planende ist ! Beispiel: u,01,l,03,p!
+
+
+user_prompt:
+AKTUELLER ZUG 2. Nur dieser Zustand ist maßgeblich.
+
+Exakte Zustandsanalyse:
+Kopf=(22,9); Richtung=down; Futter=(12,2) → 10 Felder links, 7 Felder oben.
+Freie Felder bis zur Wand: links=22, rechts=7, oben=9, unten=8.
+Sofort erlaubte Richtungen: down, left, right. LLM_DELAY_TICKS=13 (letzte Antwort 6.187s). Benötigter Sicherheitskorridor am Planende=15 Ticks. Ohne Richtungswechsel: KOLLISION nach spätestens 9 Ticks.
+
+TCP-Ansicht zum selben Zeitpunkt (Modus=coordinates):
+```text
+SNAKE_COORDINATES
+status=running
+board_width=30; board_height=18
+valid_x=0..29; valid_y=0..17
+origin=(0,0) top-left; x increases right; y increases down
+tick_seconds=0.500; tick_count=9
+direction=down
+head=(22, 9)
+body=[(22, 8), (21, 8)]
+food=(12, 2)
+```
+
+Vorher ausgeführt: up 1 Ticks (angenommen=True); right 7 Ticks (angenommen=True); down 1 Ticks (angenommen=True)
+Das Spiel läuft während der Berechnung ohne Pause weiter.
+
+Wähle eine Richtung zum Futter, aber vermeide zuerst die Wand. Wenn du bewusst
+geradeaus weiterfahren willst, verwende `w`/`wait` statt die aktuelle Richtung
+noch einmal auszugeben. Bei Kollisionsprognose musst du jetzt eine andere
+erlaubte Richtung wählen. `p`/`screenshot` beobachtet nur
+und startet das Spiel nicht. Antworte exakt im vorgegebenen Ausgabeformat.
+
+
+================================================================================
+[2026-10-24T21:23:23.235417+00:00 | +17.255s] LLM_RESPONSE
+
+turn:
+2
+
+inference_seconds:
+3.478897250024602
+
+generation_metrics:
+{'cache_reused': True,
+ 'cache_status': 'reused',
+ 'prompt_tokens_processed': 467,
+ 'generated_tokens': 9,
+ 'model_seconds': 3.0791803330066614,
+ 'mask_seconds': 0.00021683319937437773}
+
+raw_response:
+l,09,d,07!
+
+actions:
+[{'command': 'left', 'ticks': 9}, {'command': 'down', 'ticks': 7}]
+
+================================================================================
+[2026-10-24T21:23:23.235846+00:00 | +17.255s] SAFETY_CHECK
+
+turn:
+2
+
+required_runway_ticks:
+9
+
+original_actions:
+[{'command': 'left', 'ticks': 9}, {'command': 'down', 'ticks': 7}]
+
+safe_actions:
+[{'command': 'left', 'ticks': 9}, {'command': 'down', 'ticks': 1}, {'command': 'right', 'ticks': 1}]
+
+adjustments:
+['down nach 1 sicheren Ticks gekürzt: Kollision voraus',
+ 'Sicherheitsabbiegung right, weil Endkorridor 0 < benötigte 9 Ticks (neuer Korridor 15)']
+
+live_state:
+{'status': 'running',
+ 'score': 0,
+ 'tick_count': 16,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'down',
+ 'snake': [[22, 16], [22, 15], [22, 14]],
+ 'food': [12, 2]}
+
+================================================================================
+[2026-10-24T21:23:27.831319+00:00 | +21.850s] ACTION
+
+turn:
+2
+
+index:
+0
+
+command:
+left
+
+requested_ticks:
+9
+
+ticks:
+9
+
+direction_accepted:
+True
+
+state:
+{'status': 'running',
+ 'score': 0,
+ 'tick_count': 25,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'left',
+ 'snake': [[13, 16], [14, 16], [15, 16]],
+ 'food': [12, 2]}
+
+================================================================================
+[2026-10-24T21:23:28.316370+00:00 | +22.336s] ACTION
+
+turn:
+2
+
+index:
+1
+
+command:
+down
+
+requested_ticks:
+1
+
+ticks:
+1
+
+direction_accepted:
+True
+
+state:
+{'status': 'running',
+ 'score': 0,
+ 'tick_count': 26,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'down',
+ 'snake': [[13, 17], [13, 16], [14, 16]],
+ 'food': [12, 2]}
+
+================================================================================
+[2026-10-24T21:23:28.803000+00:00 | +22.822s] ACTION
+
+turn:
+2
+
+index:
+2
+
+command:
+right
+
+requested_ticks:
+1
+
+ticks:
+1
+
+direction_accepted:
+True
+
+state:
+{'status': 'running',
+ 'score': 0,
+ 'tick_count': 27,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'right',
+ 'snake': [[14, 17], [13, 17], [13, 16]],
+ 'food': [12, 2]}
+
+================================================================================
+[2026-10-24T21:23:28.806693+00:00 | +22.826s] SCREENSHOT
+
+turn:
+3
+
+source:
+turn_start
+
+screenshot:
+SNAKE_COORDINATES
+status=running
+board_width=30; board_height=18
+valid_x=0..29; valid_y=0..17
+origin=(0,0) top-left; x increases right; y increases down
+tick_seconds=0.500; tick_count=27
+direction=right
+head=(14, 17)
+body=[(13, 17), (13, 16)]
+food=(12, 2)
+
+state:
+{'status': 'running',
+ 'score': 0,
+ 'tick_count': 27,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'right',
+ 'snake': [[14, 17], [13, 17], [13, 16]],
+ 'food': [12, 2]}
+
+================================================================================
+[2026-10-24T21:23:28.807116+00:00 | +22.826s] PROMPT
+
+turn:
+3
+
+system_prompt:
+# Snake-Gamer
+
+Steuere Snake zum Futter, ohne Wand oder Körper zu berühren. Der Gamer liefert
+bei jedem Zug eine konfigurierbare TCP-Ansicht und zusätzlich den strukturierten
+Abschnitt `Exakte Zustandsanalyse`. Die Koordinatenangaben sind maßgeblich.
+
+- `@` = Kopf, `o` = Körper, `*` = Futter.
+- Oben links ist `(0,0)`; X wächst nach rechts, Y nach unten.
+- Die Kopfzeile nennt aktuelle Richtung und Sekunden pro Tick.
+- Eine entgegengesetzte Richtung ist verboten.
+- Zum bewussten Geradeausfahren verwende `wait`; wiederhole nicht die aktuelle Richtung.
+- Nähert sich der Kopf in seiner Bewegungsrichtung einer Wand, biege rechtzeitig
+  in eine erlaubte Richtung ab – auch wenn das Futter woanders liegt.
+
+Der erste Plan wird erzeugt, bevor das Spiel startet. Standardmäßig pausiert der
+Gamer Snake während der Modellberechnung, damit das Spiel bei langsamer lokaler
+Inferenz nicht ohne Steuerungsmöglichkeit in eine Wand fährt. Im experimentellen
+Live-Modus läuft Snake weiter; nutze dort die Kollisionsprognose und die Dauer der
+vorherigen Antwort. Alte Screenshots im Gespräch sind überholt; entscheide
+ausschließlich anhand des neuesten Zuges.
+
+Antworte ausschließlich im anschließend beschriebenen Decoderformat. Zeit wird
+als Anzahl vollständiger Spielticks angegeben, niemals in Millisekunden. Plane
+nur die nächsten sicheren Aktionen und beende den Plan in einer Richtung mit
+mindestens `Benötigter Sicherheitskorridor` freien Ticks. `screenshot` beobachtet
+lediglich den Zustand; es startet und stoppt das Spiel nicht. Der Gamer startet
+das Spiel automatisch.
+
+Ausgabe ausschließlich als kurze Liste ohne Leerzeichen.
+Codes: u=hoch, d=runter, l=links, r=rechts, w=Richtung halten, p=Screenshot.
+Auf u/d/l/r/w folgen genau zwei Ziffern für die Anzahl Spielticks (00 bis 99), keine Millisekunden.
+p bedeutet NICHT Start; der Gamer startet automatisch. Planende ist ! Beispiel: u,01,l,03,p!
+
+
+user_prompt:
+AKTUELLER ZUG 3. Nur dieser Zustand ist maßgeblich.
+
+Exakte Zustandsanalyse:
+Kopf=(14,17); Richtung=right; Futter=(12,2) → 2 Felder links, 15 Felder oben.
+Freie Felder bis zur Wand: links=14, rechts=15, oben=17, unten=0.
+Sofort erlaubte Richtungen: up, right. LLM_DELAY_TICKS=7 (letzte Antwort 3.479s). Benötigter Sicherheitskorridor am Planende=9 Ticks. Ohne Richtungswechsel: Kopf ungefähr bei (21,17), danach nur noch 8 Felder bis zur Wand.
+
+TCP-Ansicht zum selben Zeitpunkt (Modus=coordinates):
+```text
+SNAKE_COORDINATES
+status=running
+board_width=30; board_height=18
+valid_x=0..29; valid_y=0..17
+origin=(0,0) top-left; x increases right; y increases down
+tick_seconds=0.500; tick_count=27
+direction=right
+head=(14, 17)
+body=[(13, 17), (13, 16)]
+food=(12, 2)
+```
+
+Vorher ausgeführt: left 9 Ticks (angenommen=True); down 1 Ticks (angenommen=True); right 1 Ticks (angenommen=True)
+Das Spiel läuft während der Berechnung ohne Pause weiter.
+
+Wähle eine Richtung zum Futter, aber vermeide zuerst die Wand. Wenn du bewusst
+geradeaus weiterfahren willst, verwende `w`/`wait` statt die aktuelle Richtung
+noch einmal auszugeben. Bei Kollisionsprognose musst du jetzt eine andere
+erlaubte Richtung wählen. `p`/`screenshot` beobachtet nur
+und startet das Spiel nicht. Antworte exakt im vorgegebenen Ausgabeformat.
+
+
+================================================================================
+[2026-10-24T21:23:32.509098+00:00 | +26.528s] LLM_RESPONSE
+
+turn:
+3
+
+inference_seconds:
+3.7017946660052985
+
+generation_metrics:
+{'cache_reused': True,
+ 'cache_status': 'reused',
+ 'prompt_tokens_processed': 482,
+ 'generated_tokens': 9,
+ 'model_seconds': 3.3122036670683883,
+ 'mask_seconds': 0.00020545703591778874}
+
+raw_response:
+u,02,r,09!
+
+actions:
+[{'command': 'up', 'ticks': 2}, {'command': 'right', 'ticks': 9}]
+
+================================================================================
+[2026-10-24T21:23:32.509653+00:00 | +26.529s] SAFETY_CHECK
+
+turn:
+3
+
+required_runway_ticks:
+10
+
+original_actions:
+[{'command': 'up', 'ticks': 2}, {'command': 'right', 'ticks': 9}]
+
+safe_actions:
+[{'command': 'up', 'ticks': 2}, {'command': 'right', 'ticks': 8}, {'command': 'up', 'ticks': 1}]
+
+adjustments:
+['right nach 8 sicheren Ticks gekürzt: Kollision voraus',
+ 'Sicherheitsabbiegung up, weil Endkorridor 0 < benötigte 10 Ticks (neuer Korridor 14)']
+
+live_state:
+{'status': 'running',
+ 'score': 0,
+ 'tick_count': 34,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'right',
+ 'snake': [[21, 17], [20, 17], [19, 17]],
+ 'food': [12, 2]}
+
+================================================================================
+[2026-10-24T21:23:33.370148+00:00 | +27.389s] ACTION
+
+turn:
+3
+
+index:
+0
+
+command:
+up
+
+requested_ticks:
+2
+
+ticks:
+2
+
+direction_accepted:
+True
+
+state:
+{'status': 'running',
+ 'score': 0,
+ 'tick_count': 36,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'up',
+ 'snake': [[21, 15], [21, 16], [21, 17]],
+ 'food': [12, 2]}
+
+================================================================================
+[2026-10-24T21:23:37.425782+00:00 | +31.445s] ACTION
+
+turn:
+3
+
+index:
+1
+
+command:
+right
+
+requested_ticks:
+8
+
+ticks:
+8
+
+direction_accepted:
+True
+
+state:
+{'status': 'running',
+ 'score': 0,
+ 'tick_count': 44,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'right',
+ 'snake': [[29, 15], [28, 15], [27, 15]],
+ 'food': [12, 2]}
+
+================================================================================
+[2026-10-24T21:23:37.921955+00:00 | +31.941s] ACTION
+
+turn:
+3
+
+index:
+2
+
+command:
+up
+
+requested_ticks:
+1
+
+ticks:
+1
+
+direction_accepted:
+True
+
+state:
+{'status': 'running',
+ 'score': 0,
+ 'tick_count': 45,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'up',
+ 'snake': [[29, 14], [29, 15], [28, 15]],
+ 'food': [12, 2]}
+
+================================================================================
+[2026-10-24T21:23:37.922997+00:00 | +31.942s] SCREENSHOT
+
+turn:
+4
+
+source:
+turn_start
+
+screenshot:
+SNAKE_COORDINATES
+status=running
+board_width=30; board_height=18
+valid_x=0..29; valid_y=0..17
+origin=(0,0) top-left; x increases right; y increases down
+tick_seconds=0.500; tick_count=45
+direction=up
+head=(29, 14)
+body=[(29, 15), (28, 15)]
+food=(12, 2)
+
+state:
+{'status': 'running',
+ 'score': 0,
+ 'tick_count': 45,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'up',
+ 'snake': [[29, 14], [29, 15], [28, 15]],
+ 'food': [12, 2]}
+
+================================================================================
+[2026-10-24T21:23:37.923342+00:00 | +31.942s] PROMPT
+
+turn:
+4
+
+system_prompt:
+# Snake-Gamer
+
+Steuere Snake zum Futter, ohne Wand oder Körper zu berühren. Der Gamer liefert
+bei jedem Zug eine konfigurierbare TCP-Ansicht und zusätzlich den strukturierten
+Abschnitt `Exakte Zustandsanalyse`. Die Koordinatenangaben sind maßgeblich.
+
+- `@` = Kopf, `o` = Körper, `*` = Futter.
+- Oben links ist `(0,0)`; X wächst nach rechts, Y nach unten.
+- Die Kopfzeile nennt aktuelle Richtung und Sekunden pro Tick.
+- Eine entgegengesetzte Richtung ist verboten.
+- Zum bewussten Geradeausfahren verwende `wait`; wiederhole nicht die aktuelle Richtung.
+- Nähert sich der Kopf in seiner Bewegungsrichtung einer Wand, biege rechtzeitig
+  in eine erlaubte Richtung ab – auch wenn das Futter woanders liegt.
+
+Der erste Plan wird erzeugt, bevor das Spiel startet. Standardmäßig pausiert der
+Gamer Snake während der Modellberechnung, damit das Spiel bei langsamer lokaler
+Inferenz nicht ohne Steuerungsmöglichkeit in eine Wand fährt. Im experimentellen
+Live-Modus läuft Snake weiter; nutze dort die Kollisionsprognose und die Dauer der
+vorherigen Antwort. Alte Screenshots im Gespräch sind überholt; entscheide
+ausschließlich anhand des neuesten Zuges.
+
+Antworte ausschließlich im anschließend beschriebenen Decoderformat. Zeit wird
+als Anzahl vollständiger Spielticks angegeben, niemals in Millisekunden. Plane
+nur die nächsten sicheren Aktionen und beende den Plan in einer Richtung mit
+mindestens `Benötigter Sicherheitskorridor` freien Ticks. `screenshot` beobachtet
+lediglich den Zustand; es startet und stoppt das Spiel nicht. Der Gamer startet
+das Spiel automatisch.
+
+Ausgabe ausschließlich als kurze Liste ohne Leerzeichen.
+Codes: u=hoch, d=runter, l=links, r=rechts, w=Richtung halten, p=Screenshot.
+Auf u/d/l/r/w folgen genau zwei Ziffern für die Anzahl Spielticks (00 bis 99), keine Millisekunden.
+p bedeutet NICHT Start; der Gamer startet automatisch. Planende ist ! Beispiel: u,01,l,03,p!
+
+
+user_prompt:
+AKTUELLER ZUG 4. Nur dieser Zustand ist maßgeblich.
+
+Exakte Zustandsanalyse:
+Kopf=(29,14); Richtung=up; Futter=(12,2) → 17 Felder links, 12 Felder oben.
+Freie Felder bis zur Wand: links=29, rechts=0, oben=14, unten=3.
+Sofort erlaubte Richtungen: up, left. LLM_DELAY_TICKS=8 (letzte Antwort 3.702s). Benötigter Sicherheitskorridor am Planende=10 Ticks. Ohne Richtungswechsel: Kopf ungefähr bei (29,6), danach nur noch 6 Felder bis zur Wand.
+
+TCP-Ansicht zum selben Zeitpunkt (Modus=coordinates):
+```text
+SNAKE_COORDINATES
+status=running
+board_width=30; board_height=18
+valid_x=0..29; valid_y=0..17
+origin=(0,0) top-left; x increases right; y increases down
+tick_seconds=0.500; tick_count=45
+direction=up
+head=(29, 14)
+body=[(29, 15), (28, 15)]
+food=(12, 2)
+```
+
+Vorher ausgeführt: up 2 Ticks (angenommen=True); right 8 Ticks (angenommen=True); up 1 Ticks (angenommen=True)
+Das Spiel läuft während der Berechnung ohne Pause weiter.
+
+Wähle eine Richtung zum Futter, aber vermeide zuerst die Wand. Wenn du bewusst
+geradeaus weiterfahren willst, verwende `w`/`wait` statt die aktuelle Richtung
+noch einmal auszugeben. Bei Kollisionsprognose musst du jetzt eine andere
+erlaubte Richtung wählen. `p`/`screenshot` beobachtet nur
+und startet das Spiel nicht. Antworte exakt im vorgegebenen Ausgabeformat.
+
+
+================================================================================
+[2026-10-24T21:23:41.774895+00:00 | +35.794s] LLM_RESPONSE
+
+turn:
+4
+
+inference_seconds:
+3.851283958996646
+
+generation_metrics:
+{'cache_reused': True,
+ 'cache_status': 'reused',
+ 'prompt_tokens_processed': 482,
+ 'generated_tokens': 9,
+ 'model_seconds': 3.444565042911563,
+ 'mask_seconds': 0.0002219600137323141}
+
+raw_response:
+l,09,u,08!
+
+actions:
+[{'command': 'left', 'ticks': 9}, {'command': 'up', 'ticks': 8}]
+
+================================================================================
+[2026-10-24T21:23:41.775390+00:00 | +35.794s] SAFETY_CHECK
+
+turn:
+4
+
+required_runway_ticks:
+10
+
+original_actions:
+[{'command': 'left', 'ticks': 9}, {'command': 'up', 'ticks': 8}]
+
+safe_actions:
+[{'command': 'left', 'ticks': 9}, {'command': 'up', 'ticks': 7}, {'command': 'left', 'ticks': 1}]
+
+adjustments:
+['up nach 7 sicheren Ticks gekürzt: Kollision voraus',
+ 'Sicherheitsabbiegung left, weil Endkorridor 0 < benötigte 10 Ticks (neuer Korridor 19)']
+
+live_state:
+{'status': 'running',
+ 'score': 0,
+ 'tick_count': 52,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'up',
+ 'snake': [[29, 7], [29, 8], [29, 9]],
+ 'food': [12, 2]}
+
+================================================================================
+[2026-10-24T21:23:46.019313+00:00 | +40.038s] ACTION
+
+turn:
+4
+
+index:
+0
+
+command:
+left
+
+requested_ticks:
+9
+
+ticks:
+9
+
+direction_accepted:
+True
+
+state:
+{'status': 'running',
+ 'score': 0,
+ 'tick_count': 61,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'left',
+ 'snake': [[20, 7], [21, 7], [22, 7]],
+ 'food': [12, 2]}
+
+================================================================================
+[2026-10-24T21:23:49.537111+00:00 | +43.556s] ACTION
+
+turn:
+4
+
+index:
+1
+
+command:
+up
+
+requested_ticks:
+7
+
+ticks:
+7
+
+direction_accepted:
+True
+
+state:
+{'status': 'running',
+ 'score': 0,
+ 'tick_count': 68,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'up',
+ 'snake': [[20, 0], [20, 1], [20, 2]],
+ 'food': [12, 2]}
+
+================================================================================
+[2026-10-24T21:23:50.087059+00:00 | +44.106s] ACTION
+
+turn:
+4
+
+index:
+2
+
+command:
+left
+
+requested_ticks:
+1
+
+ticks:
+1
+
+direction_accepted:
+True
+
+state:
+{'status': 'running',
+ 'score': 0,
+ 'tick_count': 69,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'left',
+ 'snake': [[19, 0], [20, 0], [20, 1]],
+ 'food': [12, 2]}
+
+================================================================================
+[2026-10-24T21:23:50.088138+00:00 | +44.107s] SCREENSHOT
+
+turn:
+5
+
+source:
+turn_start
+
+screenshot:
+SNAKE_COORDINATES
+status=running
+board_width=30; board_height=18
+valid_x=0..29; valid_y=0..17
+origin=(0,0) top-left; x increases right; y increases down
+tick_seconds=0.500; tick_count=69
+direction=left
+head=(19, 0)
+body=[(20, 0), (20, 1)]
+food=(12, 2)
+
+state:
+{'status': 'running',
+ 'score': 0,
+ 'tick_count': 69,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'left',
+ 'snake': [[19, 0], [20, 0], [20, 1]],
+ 'food': [12, 2]}
+
+================================================================================
+[2026-10-24T21:23:50.088492+00:00 | +44.108s] PROMPT
+
+turn:
+5
+
+system_prompt:
+# Snake-Gamer
+
+Steuere Snake zum Futter, ohne Wand oder Körper zu berühren. Der Gamer liefert
+bei jedem Zug eine konfigurierbare TCP-Ansicht und zusätzlich den strukturierten
+Abschnitt `Exakte Zustandsanalyse`. Die Koordinatenangaben sind maßgeblich.
+
+- `@` = Kopf, `o` = Körper, `*` = Futter.
+- Oben links ist `(0,0)`; X wächst nach rechts, Y nach unten.
+- Die Kopfzeile nennt aktuelle Richtung und Sekunden pro Tick.
+- Eine entgegengesetzte Richtung ist verboten.
+- Zum bewussten Geradeausfahren verwende `wait`; wiederhole nicht die aktuelle Richtung.
+- Nähert sich der Kopf in seiner Bewegungsrichtung einer Wand, biege rechtzeitig
+  in eine erlaubte Richtung ab – auch wenn das Futter woanders liegt.
+
+Der erste Plan wird erzeugt, bevor das Spiel startet. Standardmäßig pausiert der
+Gamer Snake während der Modellberechnung, damit das Spiel bei langsamer lokaler
+Inferenz nicht ohne Steuerungsmöglichkeit in eine Wand fährt. Im experimentellen
+Live-Modus läuft Snake weiter; nutze dort die Kollisionsprognose und die Dauer der
+vorherigen Antwort. Alte Screenshots im Gespräch sind überholt; entscheide
+ausschließlich anhand des neuesten Zuges.
+
+Antworte ausschließlich im anschließend beschriebenen Decoderformat. Zeit wird
+als Anzahl vollständiger Spielticks angegeben, niemals in Millisekunden. Plane
+nur die nächsten sicheren Aktionen und beende den Plan in einer Richtung mit
+mindestens `Benötigter Sicherheitskorridor` freien Ticks. `screenshot` beobachtet
+lediglich den Zustand; es startet und stoppt das Spiel nicht. Der Gamer startet
+das Spiel automatisch.
+
+Ausgabe ausschließlich als kurze Liste ohne Leerzeichen.
+Codes: u=hoch, d=runter, l=links, r=rechts, w=Richtung halten, p=Screenshot.
+Auf u/d/l/r/w folgen genau zwei Ziffern für die Anzahl Spielticks (00 bis 99), keine Millisekunden.
+p bedeutet NICHT Start; der Gamer startet automatisch. Planende ist ! Beispiel: u,01,l,03,p!
+
+
+user_prompt:
+AKTUELLER ZUG 5. Nur dieser Zustand ist maßgeblich.
+
+Exakte Zustandsanalyse:
+Kopf=(19,0); Richtung=left; Futter=(12,2) → 7 Felder links, 2 Felder unten.
+Freie Felder bis zur Wand: links=19, rechts=10, oben=0, unten=17.
+Sofort erlaubte Richtungen: down, left. LLM_DELAY_TICKS=8 (letzte Antwort 3.851s). Benötigter Sicherheitskorridor am Planende=10 Ticks. Ohne Richtungswechsel: Kopf ungefähr bei (11,0), danach nur noch 11 Felder bis zur Wand.
+
+TCP-Ansicht zum selben Zeitpunkt (Modus=coordinates):
+```text
+SNAKE_COORDINATES
+status=running
+board_width=30; board_height=18
+valid_x=0..29; valid_y=0..17
+origin=(0,0) top-left; x increases right; y increases down
+tick_seconds=0.500; tick_count=69
+direction=left
+head=(19, 0)
+body=[(20, 0), (20, 1)]
+food=(12, 2)
+```
+
+Vorher ausgeführt: left 9 Ticks (angenommen=True); up 7 Ticks (angenommen=True); left 1 Ticks (angenommen=True)
+Das Spiel läuft während der Berechnung ohne Pause weiter.
+
+Wähle eine Richtung zum Futter, aber vermeide zuerst die Wand. Wenn du bewusst
+geradeaus weiterfahren willst, verwende `w`/`wait` statt die aktuelle Richtung
+noch einmal auszugeben. Bei Kollisionsprognose musst du jetzt eine andere
+erlaubte Richtung wählen. `p`/`screenshot` beobachtet nur
+und startet das Spiel nicht. Antworte exakt im vorgegebenen Ausgabeformat.
+
+
+================================================================================
+[2026-10-24T21:23:53.710653+00:00 | +47.730s] LLM_RESPONSE
+
+turn:
+5
+
+inference_seconds:
+3.622076958010439
+
+generation_metrics:
+{'cache_reused': True,
+ 'cache_status': 'reused',
+ 'prompt_tokens_processed': 478,
+ 'generated_tokens': 9,
+ 'model_seconds': 3.2454534160206094,
+ 'mask_seconds': 0.00022904295474290848}
+
+raw_response:
+d,07,l,09!
+
+actions:
+[{'command': 'down', 'ticks': 7}, {'command': 'left', 'ticks': 9}]
+
+================================================================================
+[2026-10-24T21:23:53.711196+00:00 | +47.730s] SAFETY_CHECK
+
+turn:
+5
+
+required_runway_ticks:
+10
+
+original_actions:
+[{'command': 'down', 'ticks': 7}, {'command': 'left', 'ticks': 9}]
+
+safe_actions:
+[{'command': 'down', 'ticks': 7}, {'command': 'left', 'ticks': 9}, {'command': 'down', 'ticks': 1}]
+
+adjustments:
+['Sicherheitsabbiegung down, weil Endkorridor 3 < benötigte 10 Ticks (neuer Korridor 9)']
+
+live_state:
+{'status': 'running',
+ 'score': 0,
+ 'tick_count': 76,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'left',
+ 'snake': [[12, 0], [13, 0], [14, 0]],
+ 'food': [12, 2]}
+
+================================================================================
+[2026-10-24T21:23:57.150117+00:00 | +51.169s] ACTION
+
+turn:
+5
+
+index:
+0
+
+command:
+down
+
+requested_ticks:
+7
+
+ticks:
+7
+
+direction_accepted:
+True
+
+state:
+{'status': 'running',
+ 'score': 1,
+ 'tick_count': 83,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'down',
+ 'snake': [[12, 7], [12, 6], [12, 5], [12, 4]],
+ 'food': [8, 5]}
+
+================================================================================
+[2026-10-24T21:24:01.720311+00:00 | +55.739s] ACTION
+
+turn:
+5
+
+index:
+1
+
+command:
+left
+
+requested_ticks:
+9
+
+ticks:
+9
+
+direction_accepted:
+True
+
+state:
+{'status': 'running',
+ 'score': 1,
+ 'tick_count': 92,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'left',
+ 'snake': [[3, 7], [4, 7], [5, 7], [6, 7]],
+ 'food': [8, 5]}
+
+================================================================================
+[2026-10-24T21:24:02.256071+00:00 | +56.275s] ACTION
+
+turn:
+5
+
+index:
+2
+
+command:
+down
+
+requested_ticks:
+1
+
+ticks:
+1
+
+direction_accepted:
+True
+
+state:
+{'status': 'running',
+ 'score': 1,
+ 'tick_count': 93,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'down',
+ 'snake': [[3, 8], [3, 7], [4, 7], [5, 7]],
+ 'food': [8, 5]}
+
+================================================================================
+[2026-10-24T21:24:02.257609+00:00 | +56.277s] SCREENSHOT
+
+turn:
+6
+
+source:
+turn_start
+
+screenshot:
+SNAKE_COORDINATES
+status=running
+board_width=30; board_height=18
+valid_x=0..29; valid_y=0..17
+origin=(0,0) top-left; x increases right; y increases down
+tick_seconds=0.500; tick_count=93
+direction=down
+head=(3, 8)
+body=[(3, 7), (4, 7), (5, 7)]
+food=(8, 5)
+
+state:
+{'status': 'running',
+ 'score': 1,
+ 'tick_count': 93,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'down',
+ 'snake': [[3, 8], [3, 7], [4, 7], [5, 7]],
+ 'food': [8, 5]}
+
+================================================================================
+[2026-10-24T21:24:02.257999+00:00 | +56.277s] PROMPT
+
+turn:
+6
+
+system_prompt:
+# Snake-Gamer
+
+Steuere Snake zum Futter, ohne Wand oder Körper zu berühren. Der Gamer liefert
+bei jedem Zug eine konfigurierbare TCP-Ansicht und zusätzlich den strukturierten
+Abschnitt `Exakte Zustandsanalyse`. Die Koordinatenangaben sind maßgeblich.
+
+- `@` = Kopf, `o` = Körper, `*` = Futter.
+- Oben links ist `(0,0)`; X wächst nach rechts, Y nach unten.
+- Die Kopfzeile nennt aktuelle Richtung und Sekunden pro Tick.
+- Eine entgegengesetzte Richtung ist verboten.
+- Zum bewussten Geradeausfahren verwende `wait`; wiederhole nicht die aktuelle Richtung.
+- Nähert sich der Kopf in seiner Bewegungsrichtung einer Wand, biege rechtzeitig
+  in eine erlaubte Richtung ab – auch wenn das Futter woanders liegt.
+
+Der erste Plan wird erzeugt, bevor das Spiel startet. Standardmäßig pausiert der
+Gamer Snake während der Modellberechnung, damit das Spiel bei langsamer lokaler
+Inferenz nicht ohne Steuerungsmöglichkeit in eine Wand fährt. Im experimentellen
+Live-Modus läuft Snake weiter; nutze dort die Kollisionsprognose und die Dauer der
+vorherigen Antwort. Alte Screenshots im Gespräch sind überholt; entscheide
+ausschließlich anhand des neuesten Zuges.
+
+Antworte ausschließlich im anschließend beschriebenen Decoderformat. Zeit wird
+als Anzahl vollständiger Spielticks angegeben, niemals in Millisekunden. Plane
+nur die nächsten sicheren Aktionen und beende den Plan in einer Richtung mit
+mindestens `Benötigter Sicherheitskorridor` freien Ticks. `screenshot` beobachtet
+lediglich den Zustand; es startet und stoppt das Spiel nicht. Der Gamer startet
+das Spiel automatisch.
+
+Ausgabe ausschließlich als kurze Liste ohne Leerzeichen.
+Codes: u=hoch, d=runter, l=links, r=rechts, w=Richtung halten, p=Screenshot.
+Auf u/d/l/r/w folgen genau zwei Ziffern für die Anzahl Spielticks (00 bis 99), keine Millisekunden.
+p bedeutet NICHT Start; der Gamer startet automatisch. Planende ist ! Beispiel: u,01,l,03,p!
+
+
+user_prompt:
+AKTUELLER ZUG 6. Nur dieser Zustand ist maßgeblich.
+
+Exakte Zustandsanalyse:
+Kopf=(3,8); Richtung=down; Futter=(8,5) → 5 Felder rechts, 3 Felder oben.
+Freie Felder bis zur Wand: links=3, rechts=26, oben=8, unten=9.
+Sofort erlaubte Richtungen: down, left, right. LLM_DELAY_TICKS=8 (letzte Antwort 3.622s). Benötigter Sicherheitskorridor am Planende=10 Ticks. Ohne Richtungswechsel: Kopf ungefähr bei (3,16), danach nur noch 1 Felder bis zur Wand; IN DIESER ANTWORT ABBIEGEN, NICHT GERADEAUS WEITERFAHREN.
+
+TCP-Ansicht zum selben Zeitpunkt (Modus=coordinates):
+```text
+SNAKE_COORDINATES
+status=running
+board_width=30; board_height=18
+valid_x=0..29; valid_y=0..17
+origin=(0,0) top-left; x increases right; y increases down
+tick_seconds=0.500; tick_count=93
+direction=down
+head=(3, 8)
+body=[(3, 7), (4, 7), (5, 7)]
+food=(8, 5)
+```
+
+Vorher ausgeführt: down 7 Ticks (angenommen=True); left 9 Ticks (angenommen=True); down 1 Ticks (angenommen=True)
+Das Spiel läuft während der Berechnung ohne Pause weiter.
+
+Wähle eine Richtung zum Futter, aber vermeide zuerst die Wand. Wenn du bewusst
+geradeaus weiterfahren willst, verwende `w`/`wait` statt die aktuelle Richtung
+noch einmal auszugeben. Bei Kollisionsprognose musst du jetzt eine andere
+erlaubte Richtung wählen. `p`/`screenshot` beobachtet nur
+und startet das Spiel nicht. Antworte exakt im vorgegebenen Ausgabeformat.
+
+
+================================================================================
+[2026-10-24T21:24:06.165699+00:00 | +60.185s] LLM_RESPONSE
+
+turn:
+6
+
+inference_seconds:
+3.9075115410378203
+
+generation_metrics:
+{'cache_reused': True,
+ 'cache_status': 'reused',
+ 'prompt_tokens_processed': 503,
+ 'generated_tokens': 9,
+ 'model_seconds': 3.5183516661054455,
+ 'mask_seconds': 0.00025808101054280996}
+
+raw_response:
+r,05,d,08!
+
+actions:
+[{'command': 'right', 'ticks': 5}, {'command': 'down', 'ticks': 8}]
+
+================================================================================
+[2026-10-24T21:24:06.166155+00:00 | +60.185s] SAFETY_CHECK
+
+turn:
+6
+
+required_runway_ticks:
+10
+
+original_actions:
+[{'command': 'right', 'ticks': 5}, {'command': 'down', 'ticks': 8}]
+
+safe_actions:
+[{'command': 'right', 'ticks': 5},
+ {'command': 'down', 'ticks': 2},
+ {'command': 'right', 'ticks': 1}]
+
+adjustments:
+['down nach 2 sicheren Ticks gekürzt: Kollision voraus',
+ 'Sicherheitsabbiegung right, weil Endkorridor 0 < benötigte 10 Ticks (neuer Korridor 20)']
+
+live_state:
+{'status': 'running',
+ 'score': 1,
+ 'tick_count': 100,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'down',
+ 'snake': [[3, 15], [3, 14], [3, 13], [3, 12]],
+ 'food': [8, 5]}
+
+================================================================================
+[2026-10-24T21:24:08.340015+00:00 | +62.359s] ACTION
+
+turn:
+6
+
+index:
+0
+
+command:
+right
+
+requested_ticks:
+5
+
+ticks:
+5
+
+direction_accepted:
+True
+
+state:
+{'status': 'running',
+ 'score': 1,
+ 'tick_count': 105,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'right',
+ 'snake': [[8, 15], [7, 15], [6, 15], [5, 15]],
+ 'food': [8, 5]}
+
+================================================================================
+[2026-10-24T21:24:09.329690+00:00 | +63.349s] ACTION
+
+turn:
+6
+
+index:
+1
+
+command:
+down
+
+requested_ticks:
+2
+
+ticks:
+2
+
+direction_accepted:
+True
+
+state:
+{'status': 'running',
+ 'score': 1,
+ 'tick_count': 107,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'down',
+ 'snake': [[8, 17], [8, 16], [8, 15], [7, 15]],
+ 'food': [8, 5]}
+
+================================================================================
+[2026-10-24T21:24:09.822413+00:00 | +63.841s] ACTION
+
+turn:
+6
+
+index:
+2
+
+command:
+right
+
+requested_ticks:
+1
+
+ticks:
+1
+
+direction_accepted:
+True
+
+state:
+{'status': 'running',
+ 'score': 1,
+ 'tick_count': 108,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'right',
+ 'snake': [[9, 17], [8, 17], [8, 16], [8, 15]],
+ 'food': [8, 5]}
+
+================================================================================
+[2026-10-24T21:24:09.824127+00:00 | +63.843s] SCREENSHOT
+
+turn:
+7
+
+source:
+turn_start
+
+screenshot:
+SNAKE_COORDINATES
+status=running
+board_width=30; board_height=18
+valid_x=0..29; valid_y=0..17
+origin=(0,0) top-left; x increases right; y increases down
+tick_seconds=0.500; tick_count=108
+direction=right
+head=(9, 17)
+body=[(8, 17), (8, 16), (8, 15)]
+food=(8, 5)
+
+state:
+{'status': 'running',
+ 'score': 1,
+ 'tick_count': 108,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'right',
+ 'snake': [[9, 17], [8, 17], [8, 16], [8, 15]],
+ 'food': [8, 5]}
+
+================================================================================
+[2026-10-24T21:24:09.824569+00:00 | +63.844s] PROMPT
+
+turn:
+7
+
+system_prompt:
+# Snake-Gamer
+
+Steuere Snake zum Futter, ohne Wand oder Körper zu berühren. Der Gamer liefert
+bei jedem Zug eine konfigurierbare TCP-Ansicht und zusätzlich den strukturierten
+Abschnitt `Exakte Zustandsanalyse`. Die Koordinatenangaben sind maßgeblich.
+
+- `@` = Kopf, `o` = Körper, `*` = Futter.
+- Oben links ist `(0,0)`; X wächst nach rechts, Y nach unten.
+- Die Kopfzeile nennt aktuelle Richtung und Sekunden pro Tick.
+- Eine entgegengesetzte Richtung ist verboten.
+- Zum bewussten Geradeausfahren verwende `wait`; wiederhole nicht die aktuelle Richtung.
+- Nähert sich der Kopf in seiner Bewegungsrichtung einer Wand, biege rechtzeitig
+  in eine erlaubte Richtung ab – auch wenn das Futter woanders liegt.
+
+Der erste Plan wird erzeugt, bevor das Spiel startet. Standardmäßig pausiert der
+Gamer Snake während der Modellberechnung, damit das Spiel bei langsamer lokaler
+Inferenz nicht ohne Steuerungsmöglichkeit in eine Wand fährt. Im experimentellen
+Live-Modus läuft Snake weiter; nutze dort die Kollisionsprognose und die Dauer der
+vorherigen Antwort. Alte Screenshots im Gespräch sind überholt; entscheide
+ausschließlich anhand des neuesten Zuges.
+
+Antworte ausschließlich im anschließend beschriebenen Decoderformat. Zeit wird
+als Anzahl vollständiger Spielticks angegeben, niemals in Millisekunden. Plane
+nur die nächsten sicheren Aktionen und beende den Plan in einer Richtung mit
+mindestens `Benötigter Sicherheitskorridor` freien Ticks. `screenshot` beobachtet
+lediglich den Zustand; es startet und stoppt das Spiel nicht. Der Gamer startet
+das Spiel automatisch.
+
+Ausgabe ausschließlich als kurze Liste ohne Leerzeichen.
+Codes: u=hoch, d=runter, l=links, r=rechts, w=Richtung halten, p=Screenshot.
+Auf u/d/l/r/w folgen genau zwei Ziffern für die Anzahl Spielticks (00 bis 99), keine Millisekunden.
+p bedeutet NICHT Start; der Gamer startet automatisch. Planende ist ! Beispiel: u,01,l,03,p!
+
+
+user_prompt:
+AKTUELLER ZUG 7. Nur dieser Zustand ist maßgeblich.
+
+Exakte Zustandsanalyse:
+Kopf=(9,17); Richtung=right; Futter=(8,5) → 1 Felder links, 12 Felder oben.
+Freie Felder bis zur Wand: links=9, rechts=20, oben=17, unten=0.
+Sofort erlaubte Richtungen: up, right. LLM_DELAY_TICKS=8 (letzte Antwort 3.908s). Benötigter Sicherheitskorridor am Planende=10 Ticks. Ohne Richtungswechsel: Kopf ungefähr bei (17,17), danach nur noch 12 Felder bis zur Wand.
+
+TCP-Ansicht zum selben Zeitpunkt (Modus=coordinates):
+```text
+SNAKE_COORDINATES
+status=running
+board_width=30; board_height=18
+valid_x=0..29; valid_y=0..17
+origin=(0,0) top-left; x increases right; y increases down
+tick_seconds=0.500; tick_count=108
+direction=right
+head=(9, 17)
+body=[(8, 17), (8, 16), (8, 15)]
+food=(8, 5)
+```
+
+Vorher ausgeführt: right 5 Ticks (angenommen=True); down 2 Ticks (angenommen=True); right 1 Ticks (angenommen=True)
+Das Spiel läuft während der Berechnung ohne Pause weiter.
+
+Wähle eine Richtung zum Futter, aber vermeide zuerst die Wand. Wenn du bewusst
+geradeaus weiterfahren willst, verwende `w`/`wait` statt die aktuelle Richtung
+noch einmal auszugeben. Bei Kollisionsprognose musst du jetzt eine andere
+erlaubte Richtung wählen. `p`/`screenshot` beobachtet nur
+und startet das Spiel nicht. Antworte exakt im vorgegebenen Ausgabeformat.
+
+
+================================================================================
+[2026-10-24T21:24:13.797506+00:00 | +67.816s] LLM_RESPONSE
+
+turn:
+7
+
+inference_seconds:
+3.972763792029582
+
+generation_metrics:
+{'cache_reused': True,
+ 'cache_status': 'reused',
+ 'prompt_tokens_processed': 485,
+ 'generated_tokens': 9,
+ 'model_seconds': 3.571079916029703,
+ 'mask_seconds': 0.00020416692132130265}
+
+raw_response:
+u,09,r,08!
+
+actions:
+[{'command': 'up', 'ticks': 9}, {'command': 'right', 'ticks': 8}]
+
+================================================================================
+[2026-10-24T21:24:13.798060+00:00 | +67.817s] SAFETY_CHECK
+
+turn:
+7
+
+required_runway_ticks:
+10
+
+original_actions:
+[{'command': 'up', 'ticks': 9}, {'command': 'right', 'ticks': 8}]
+
+safe_actions:
+[{'command': 'up', 'ticks': 9}, {'command': 'right', 'ticks': 8}, {'command': 'down', 'ticks': 1}]
+
+adjustments:
+['Sicherheitsabbiegung down, weil Endkorridor 5 < benötigte 10 Ticks (neuer Korridor 8)']
+
+live_state:
+{'status': 'running',
+ 'score': 1,
+ 'tick_count': 115,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'right',
+ 'snake': [[16, 17], [15, 17], [14, 17], [13, 17]],
+ 'food': [8, 5]}
+
+================================================================================
+[2026-10-24T21:24:17.951029+00:00 | +71.970s] ACTION
+
+turn:
+7
+
+index:
+0
+
+command:
+up
+
+requested_ticks:
+9
+
+ticks:
+9
+
+direction_accepted:
+True
+
+state:
+{'status': 'running',
+ 'score': 1,
+ 'tick_count': 124,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'up',
+ 'snake': [[16, 8], [16, 9], [16, 10], [16, 11]],
+ 'food': [8, 5]}
+
+================================================================================
+[2026-10-24T21:24:21.958444+00:00 | +75.977s] ACTION
+
+turn:
+7
+
+index:
+1
+
+command:
+right
+
+requested_ticks:
+8
+
+ticks:
+8
+
+direction_accepted:
+True
+
+state:
+{'status': 'running',
+ 'score': 1,
+ 'tick_count': 132,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'right',
+ 'snake': [[24, 8], [23, 8], [22, 8], [21, 8]],
+ 'food': [8, 5]}
+
+================================================================================
+[2026-10-24T21:24:22.460014+00:00 | +76.479s] ACTION
+
+turn:
+7
+
+index:
+2
+
+command:
+down
+
+requested_ticks:
+1
+
+ticks:
+1
+
+direction_accepted:
+True
+
+state:
+{'status': 'running',
+ 'score': 1,
+ 'tick_count': 133,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'down',
+ 'snake': [[24, 9], [24, 8], [23, 8], [22, 8]],
+ 'food': [8, 5]}
+
+================================================================================
+[2026-10-24T21:24:22.460898+00:00 | +76.480s] SCREENSHOT
+
+turn:
+8
+
+source:
+turn_start
+
+screenshot:
+SNAKE_COORDINATES
+status=running
+board_width=30; board_height=18
+valid_x=0..29; valid_y=0..17
+origin=(0,0) top-left; x increases right; y increases down
+tick_seconds=0.500; tick_count=133
+direction=down
+head=(24, 9)
+body=[(24, 8), (23, 8), (22, 8)]
+food=(8, 5)
+
+state:
+{'status': 'running',
+ 'score': 1,
+ 'tick_count': 133,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'down',
+ 'snake': [[24, 9], [24, 8], [23, 8], [22, 8]],
+ 'food': [8, 5]}
+
+================================================================================
+[2026-10-24T21:24:22.461211+00:00 | +76.480s] PROMPT
+
+turn:
+8
+
+system_prompt:
+# Snake-Gamer
+
+Steuere Snake zum Futter, ohne Wand oder Körper zu berühren. Der Gamer liefert
+bei jedem Zug eine konfigurierbare TCP-Ansicht und zusätzlich den strukturierten
+Abschnitt `Exakte Zustandsanalyse`. Die Koordinatenangaben sind maßgeblich.
+
+- `@` = Kopf, `o` = Körper, `*` = Futter.
+- Oben links ist `(0,0)`; X wächst nach rechts, Y nach unten.
+- Die Kopfzeile nennt aktuelle Richtung und Sekunden pro Tick.
+- Eine entgegengesetzte Richtung ist verboten.
+- Zum bewussten Geradeausfahren verwende `wait`; wiederhole nicht die aktuelle Richtung.
+- Nähert sich der Kopf in seiner Bewegungsrichtung einer Wand, biege rechtzeitig
+  in eine erlaubte Richtung ab – auch wenn das Futter woanders liegt.
+
+Der erste Plan wird erzeugt, bevor das Spiel startet. Standardmäßig pausiert der
+Gamer Snake während der Modellberechnung, damit das Spiel bei langsamer lokaler
+Inferenz nicht ohne Steuerungsmöglichkeit in eine Wand fährt. Im experimentellen
+Live-Modus läuft Snake weiter; nutze dort die Kollisionsprognose und die Dauer der
+vorherigen Antwort. Alte Screenshots im Gespräch sind überholt; entscheide
+ausschließlich anhand des neuesten Zuges.
+
+Antworte ausschließlich im anschließend beschriebenen Decoderformat. Zeit wird
+als Anzahl vollständiger Spielticks angegeben, niemals in Millisekunden. Plane
+nur die nächsten sicheren Aktionen und beende den Plan in einer Richtung mit
+mindestens `Benötigter Sicherheitskorridor` freien Ticks. `screenshot` beobachtet
+lediglich den Zustand; es startet und stoppt das Spiel nicht. Der Gamer startet
+das Spiel automatisch.
+
+Ausgabe ausschließlich als kurze Liste ohne Leerzeichen.
+Codes: u=hoch, d=runter, l=links, r=rechts, w=Richtung halten, p=Screenshot.
+Auf u/d/l/r/w folgen genau zwei Ziffern für die Anzahl Spielticks (00 bis 99), keine Millisekunden.
+p bedeutet NICHT Start; der Gamer startet automatisch. Planende ist ! Beispiel: u,01,l,03,p!
+
+
+user_prompt:
+AKTUELLER ZUG 8. Nur dieser Zustand ist maßgeblich.
+
+Exakte Zustandsanalyse:
+Kopf=(24,9); Richtung=down; Futter=(8,5) → 16 Felder links, 4 Felder oben.
+Freie Felder bis zur Wand: links=24, rechts=5, oben=9, unten=8.
+Sofort erlaubte Richtungen: down, left, right. LLM_DELAY_TICKS=8 (letzte Antwort 3.973s). Benötigter Sicherheitskorridor am Planende=10 Ticks. Ohne Richtungswechsel: Kopf ungefähr bei (24,17), danach nur noch 0 Felder bis zur Wand; IN DIESER ANTWORT ABBIEGEN, NICHT GERADEAUS WEITERFAHREN.
+
+TCP-Ansicht zum selben Zeitpunkt (Modus=coordinates):
+```text
+SNAKE_COORDINATES
+status=running
+board_width=30; board_height=18
+valid_x=0..29; valid_y=0..17
+origin=(0,0) top-left; x increases right; y increases down
+tick_seconds=0.500; tick_count=133
+direction=down
+head=(24, 9)
+body=[(24, 8), (23, 8), (22, 8)]
+food=(8, 5)
+```
+
+Vorher ausgeführt: up 9 Ticks (angenommen=True); right 8 Ticks (angenommen=True); down 1 Ticks (angenommen=True)
+Das Spiel läuft während der Berechnung ohne Pause weiter.
+
+Wähle eine Richtung zum Futter, aber vermeide zuerst die Wand. Wenn du bewusst
+geradeaus weiterfahren willst, verwende `w`/`wait` statt die aktuelle Richtung
+noch einmal auszugeben. Bei Kollisionsprognose musst du jetzt eine andere
+erlaubte Richtung wählen. `p`/`screenshot` beobachtet nur
+und startet das Spiel nicht. Antworte exakt im vorgegebenen Ausgabeformat.
+
+
+================================================================================
+[2026-10-24T21:24:26.541658+00:00 | +80.561s] LLM_RESPONSE
+
+turn:
+8
+
+inference_seconds:
+4.08028449997073
+
+generation_metrics:
+{'cache_reused': True,
+ 'cache_status': 'reused',
+ 'prompt_tokens_processed': 510,
+ 'generated_tokens': 9,
+ 'model_seconds': 3.6768169580609538,
+ 'mask_seconds': 0.0002245838986709714}
+
+raw_response:
+l,08,d,07!
+
+actions:
+[{'command': 'left', 'ticks': 8}, {'command': 'down', 'ticks': 7}]
+
+================================================================================
+[2026-10-24T21:24:26.542147+00:00 | +80.561s] SAFETY_CHECK
+
+turn:
+8
+
+required_runway_ticks:
+11
+
+original_actions:
+[{'command': 'left', 'ticks': 8}, {'command': 'down', 'ticks': 7}]
+
+safe_actions:
+[{'command': 'left', 'ticks': 8}, {'command': 'up', 'ticks': 1}]
+
+adjustments:
+['down nach 0 sicheren Ticks gekürzt: Kollision voraus',
+ 'Sicherheitsabbiegung up, weil Endkorridor 16 < benötigte 11 Ticks (neuer Korridor 16)']
+
+live_state:
+{'status': 'running',
+ 'score': 1,
+ 'tick_count': 141,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'down',
+ 'snake': [[24, 17], [24, 16], [24, 15], [24, 14]],
+ 'food': [8, 5]}
+
+================================================================================
+[2026-10-24T21:24:30.541192+00:00 | +84.560s] ACTION
+
+turn:
+8
+
+index:
+0
+
+command:
+left
+
+requested_ticks:
+8
+
+ticks:
+8
+
+direction_accepted:
+True
+
+state:
+{'status': 'running',
+ 'score': 1,
+ 'tick_count': 149,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'left',
+ 'snake': [[16, 17], [17, 17], [18, 17], [19, 17]],
+ 'food': [8, 5]}
+
+================================================================================
+[2026-10-24T21:24:31.028057+00:00 | +85.047s] ACTION
+
+turn:
+8
+
+index:
+1
+
+command:
+up
+
+requested_ticks:
+1
+
+ticks:
+1
+
+direction_accepted:
+True
+
+state:
+{'status': 'running',
+ 'score': 1,
+ 'tick_count': 150,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'up',
+ 'snake': [[16, 16], [16, 17], [17, 17], [18, 17]],
+ 'food': [8, 5]}
+
+================================================================================
+[2026-10-24T21:24:31.029196+00:00 | +85.048s] SCREENSHOT
+
+turn:
+9
+
+source:
+turn_start
+
+screenshot:
+SNAKE_COORDINATES
+status=running
+board_width=30; board_height=18
+valid_x=0..29; valid_y=0..17
+origin=(0,0) top-left; x increases right; y increases down
+tick_seconds=0.500; tick_count=150
+direction=up
+head=(16, 16)
+body=[(16, 17), (17, 17), (18, 17)]
+food=(8, 5)
+
+state:
+{'status': 'running',
+ 'score': 1,
+ 'tick_count': 150,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'up',
+ 'snake': [[16, 16], [16, 17], [17, 17], [18, 17]],
+ 'food': [8, 5]}
+
+================================================================================
+[2026-10-24T21:24:31.029593+00:00 | +85.048s] PROMPT
+
+turn:
+9
+
+system_prompt:
+# Snake-Gamer
+
+Steuere Snake zum Futter, ohne Wand oder Körper zu berühren. Der Gamer liefert
+bei jedem Zug eine konfigurierbare TCP-Ansicht und zusätzlich den strukturierten
+Abschnitt `Exakte Zustandsanalyse`. Die Koordinatenangaben sind maßgeblich.
+
+- `@` = Kopf, `o` = Körper, `*` = Futter.
+- Oben links ist `(0,0)`; X wächst nach rechts, Y nach unten.
+- Die Kopfzeile nennt aktuelle Richtung und Sekunden pro Tick.
+- Eine entgegengesetzte Richtung ist verboten.
+- Zum bewussten Geradeausfahren verwende `wait`; wiederhole nicht die aktuelle Richtung.
+- Nähert sich der Kopf in seiner Bewegungsrichtung einer Wand, biege rechtzeitig
+  in eine erlaubte Richtung ab – auch wenn das Futter woanders liegt.
+
+Der erste Plan wird erzeugt, bevor das Spiel startet. Standardmäßig pausiert der
+Gamer Snake während der Modellberechnung, damit das Spiel bei langsamer lokaler
+Inferenz nicht ohne Steuerungsmöglichkeit in eine Wand fährt. Im experimentellen
+Live-Modus läuft Snake weiter; nutze dort die Kollisionsprognose und die Dauer der
+vorherigen Antwort. Alte Screenshots im Gespräch sind überholt; entscheide
+ausschließlich anhand des neuesten Zuges.
+
+Antworte ausschließlich im anschließend beschriebenen Decoderformat. Zeit wird
+als Anzahl vollständiger Spielticks angegeben, niemals in Millisekunden. Plane
+nur die nächsten sicheren Aktionen und beende den Plan in einer Richtung mit
+mindestens `Benötigter Sicherheitskorridor` freien Ticks. `screenshot` beobachtet
+lediglich den Zustand; es startet und stoppt das Spiel nicht. Der Gamer startet
+das Spiel automatisch.
+
+Ausgabe ausschließlich als kurze Liste ohne Leerzeichen.
+Codes: u=hoch, d=runter, l=links, r=rechts, w=Richtung halten, p=Screenshot.
+Auf u/d/l/r/w folgen genau zwei Ziffern für die Anzahl Spielticks (00 bis 99), keine Millisekunden.
+p bedeutet NICHT Start; der Gamer startet automatisch. Planende ist ! Beispiel: u,01,l,03,p!
+
+
+user_prompt:
+AKTUELLER ZUG 9. Nur dieser Zustand ist maßgeblich.
+
+Exakte Zustandsanalyse:
+Kopf=(16,16); Richtung=up; Futter=(8,5) → 8 Felder links, 11 Felder oben.
+Freie Felder bis zur Wand: links=16, rechts=13, oben=16, unten=1.
+Sofort erlaubte Richtungen: up, left, right. LLM_DELAY_TICKS=9 (letzte Antwort 4.080s). Benötigter Sicherheitskorridor am Planende=11 Ticks. Ohne Richtungswechsel: Kopf ungefähr bei (16,7), danach nur noch 7 Felder bis zur Wand.
+
+TCP-Ansicht zum selben Zeitpunkt (Modus=coordinates):
+```text
+SNAKE_COORDINATES
+status=running
+board_width=30; board_height=18
+valid_x=0..29; valid_y=0..17
+origin=(0,0) top-left; x increases right; y increases down
+tick_seconds=0.500; tick_count=150
+direction=up
+head=(16, 16)
+body=[(16, 17), (17, 17), (18, 17)]
+food=(8, 5)
+```
+
+Vorher ausgeführt: left 8 Ticks (angenommen=True); up 1 Ticks (angenommen=True)
+Das Spiel läuft während der Berechnung ohne Pause weiter.
+
+Wähle eine Richtung zum Futter, aber vermeide zuerst die Wand. Wenn du bewusst
+geradeaus weiterfahren willst, verwende `w`/`wait` statt die aktuelle Richtung
+noch einmal auszugeben. Bei Kollisionsprognose musst du jetzt eine andere
+erlaubte Richtung wählen. `p`/`screenshot` beobachtet nur
+und startet das Spiel nicht. Antworte exakt im vorgegebenen Ausgabeformat.
+
+
+================================================================================
+[2026-10-24T21:24:35.143233+00:00 | +89.162s] LLM_RESPONSE
+
+turn:
+9
+
+inference_seconds:
+4.11344162496971
+
+generation_metrics:
+{'cache_reused': True,
+ 'cache_status': 'reused',
+ 'prompt_tokens_processed': 481,
+ 'generated_tokens': 9,
+ 'model_seconds': 3.7283661260735244,
+ 'mask_seconds': 0.0002364991814829409}
+
+raw_response:
+l,07,d,08!
+
+actions:
+[{'command': 'left', 'ticks': 7}, {'command': 'down', 'ticks': 8}]
+
+================================================================================
+[2026-10-24T21:24:35.143714+00:00 | +89.163s] SAFETY_CHECK
+
+turn:
+9
+
+required_runway_ticks:
+11
+
+original_actions:
+[{'command': 'left', 'ticks': 7}, {'command': 'down', 'ticks': 8}]
+
+safe_actions:
+[{'command': 'left', 'ticks': 7}, {'command': 'down', 'ticks': 8}, {'command': 'right', 'ticks': 1}]
+
+adjustments:
+['Sicherheitsabbiegung right, weil Endkorridor 1 < benötigte 11 Ticks (neuer Korridor 19)']
+
+live_state:
+{'status': 'running',
+ 'score': 1,
+ 'tick_count': 158,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'up',
+ 'snake': [[16, 8], [16, 9], [16, 10], [16, 11]],
+ 'food': [8, 5]}
+
+================================================================================
+[2026-10-24T21:24:38.636539+00:00 | +92.655s] ACTION
+
+turn:
+9
+
+index:
+0
+
+command:
+left
+
+requested_ticks:
+7
+
+ticks:
+7
+
+direction_accepted:
+True
+
+state:
+{'status': 'running',
+ 'score': 1,
+ 'tick_count': 165,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'left',
+ 'snake': [[9, 8], [10, 8], [11, 8], [12, 8]],
+ 'food': [8, 5]}
+
+================================================================================
+[2026-10-24T21:24:42.670062+00:00 | +96.689s] ACTION
+
+turn:
+9
+
+index:
+1
+
+command:
+down
+
+requested_ticks:
+8
+
+ticks:
+8
+
+direction_accepted:
+True
+
+state:
+{'status': 'running',
+ 'score': 1,
+ 'tick_count': 173,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'down',
+ 'snake': [[9, 16], [9, 15], [9, 14], [9, 13]],
+ 'food': [8, 5]}
+
+================================================================================
+[2026-10-24T21:24:43.213869+00:00 | +97.233s] ACTION
+
+turn:
+9
+
+index:
+2
+
+command:
+right
+
+requested_ticks:
+1
+
+ticks:
+1
+
+direction_accepted:
+True
+
+state:
+{'status': 'running',
+ 'score': 1,
+ 'tick_count': 174,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'right',
+ 'snake': [[10, 16], [9, 16], [9, 15], [9, 14]],
+ 'food': [8, 5]}
+
+================================================================================
+[2026-10-24T21:24:43.216503+00:00 | +97.235s] SCREENSHOT
+
+turn:
+10
+
+source:
+turn_start
+
+screenshot:
+SNAKE_COORDINATES
+status=running
+board_width=30; board_height=18
+valid_x=0..29; valid_y=0..17
+origin=(0,0) top-left; x increases right; y increases down
+tick_seconds=0.500; tick_count=174
+direction=right
+head=(10, 16)
+body=[(9, 16), (9, 15), (9, 14)]
+food=(8, 5)
+
+state:
+{'status': 'running',
+ 'score': 1,
+ 'tick_count': 174,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'right',
+ 'snake': [[10, 16], [9, 16], [9, 15], [9, 14]],
+ 'food': [8, 5]}
+
+================================================================================
+[2026-10-24T21:24:43.216971+00:00 | +97.236s] PROMPT
+
+turn:
+10
+
+system_prompt:
+# Snake-Gamer
+
+Steuere Snake zum Futter, ohne Wand oder Körper zu berühren. Der Gamer liefert
+bei jedem Zug eine konfigurierbare TCP-Ansicht und zusätzlich den strukturierten
+Abschnitt `Exakte Zustandsanalyse`. Die Koordinatenangaben sind maßgeblich.
+
+- `@` = Kopf, `o` = Körper, `*` = Futter.
+- Oben links ist `(0,0)`; X wächst nach rechts, Y nach unten.
+- Die Kopfzeile nennt aktuelle Richtung und Sekunden pro Tick.
+- Eine entgegengesetzte Richtung ist verboten.
+- Zum bewussten Geradeausfahren verwende `wait`; wiederhole nicht die aktuelle Richtung.
+- Nähert sich der Kopf in seiner Bewegungsrichtung einer Wand, biege rechtzeitig
+  in eine erlaubte Richtung ab – auch wenn das Futter woanders liegt.
+
+Der erste Plan wird erzeugt, bevor das Spiel startet. Standardmäßig pausiert der
+Gamer Snake während der Modellberechnung, damit das Spiel bei langsamer lokaler
+Inferenz nicht ohne Steuerungsmöglichkeit in eine Wand fährt. Im experimentellen
+Live-Modus läuft Snake weiter; nutze dort die Kollisionsprognose und die Dauer der
+vorherigen Antwort. Alte Screenshots im Gespräch sind überholt; entscheide
+ausschließlich anhand des neuesten Zuges.
+
+Antworte ausschließlich im anschließend beschriebenen Decoderformat. Zeit wird
+als Anzahl vollständiger Spielticks angegeben, niemals in Millisekunden. Plane
+nur die nächsten sicheren Aktionen und beende den Plan in einer Richtung mit
+mindestens `Benötigter Sicherheitskorridor` freien Ticks. `screenshot` beobachtet
+lediglich den Zustand; es startet und stoppt das Spiel nicht. Der Gamer startet
+das Spiel automatisch.
+
+Ausgabe ausschließlich als kurze Liste ohne Leerzeichen.
+Codes: u=hoch, d=runter, l=links, r=rechts, w=Richtung halten, p=Screenshot.
+Auf u/d/l/r/w folgen genau zwei Ziffern für die Anzahl Spielticks (00 bis 99), keine Millisekunden.
+p bedeutet NICHT Start; der Gamer startet automatisch. Planende ist ! Beispiel: u,01,l,03,p!
+
+
+user_prompt:
+AKTUELLER ZUG 10. Nur dieser Zustand ist maßgeblich.
+
+Exakte Zustandsanalyse:
+Kopf=(10,16); Richtung=right; Futter=(8,5) → 2 Felder links, 11 Felder oben.
+Freie Felder bis zur Wand: links=10, rechts=19, oben=16, unten=1.
+Sofort erlaubte Richtungen: up, down, right. LLM_DELAY_TICKS=9 (letzte Antwort 4.113s). Benötigter Sicherheitskorridor am Planende=11 Ticks. Ohne Richtungswechsel: Kopf ungefähr bei (19,16), danach nur noch 10 Felder bis zur Wand.
+
+TCP-Ansicht zum selben Zeitpunkt (Modus=coordinates):
+```text
+SNAKE_COORDINATES
+status=running
+board_width=30; board_height=18
+valid_x=0..29; valid_y=0..17
+origin=(0,0) top-left; x increases right; y increases down
+tick_seconds=0.500; tick_count=174
+direction=right
+head=(10, 16)
+body=[(9, 16), (9, 15), (9, 14)]
+food=(8, 5)
+```
+
+Vorher ausgeführt: left 7 Ticks (angenommen=True); down 8 Ticks (angenommen=True); right 1 Ticks (angenommen=True)
+Das Spiel läuft während der Berechnung ohne Pause weiter.
+
+Wähle eine Richtung zum Futter, aber vermeide zuerst die Wand. Wenn du bewusst
+geradeaus weiterfahren willst, verwende `w`/`wait` statt die aktuelle Richtung
+noch einmal auszugeben. Bei Kollisionsprognose musst du jetzt eine andere
+erlaubte Richtung wählen. `p`/`screenshot` beobachtet nur
+und startet das Spiel nicht. Antworte exakt im vorgegebenen Ausgabeformat.
+
+
+================================================================================
+[2026-10-24T21:24:47.347538+00:00 | +101.366s] LLM_RESPONSE
+
+turn:
+10
+
+inference_seconds:
+4.130460625048727
+
+generation_metrics:
+{'cache_reused': True,
+ 'cache_status': 'reused',
+ 'prompt_tokens_processed': 491,
+ 'generated_tokens': 9,
+ 'model_seconds': 3.726336500956677,
+ 'mask_seconds': 0.0002039169194176793}
+
+raw_response:
+u,09,r,08!
+
+actions:
+[{'command': 'up', 'ticks': 9}, {'command': 'right', 'ticks': 8}]
+
+================================================================================
+[2026-10-24T21:24:47.348118+00:00 | +101.367s] SAFETY_CHECK
+
+turn:
+10
+
+required_runway_ticks:
+11
+
+original_actions:
+[{'command': 'up', 'ticks': 9}, {'command': 'right', 'ticks': 8}]
+
+safe_actions:
+[{'command': 'up', 'ticks': 9}, {'command': 'right', 'ticks': 8}, {'command': 'down', 'ticks': 1}]
+
+adjustments:
+['Sicherheitsabbiegung down, weil Endkorridor 3 < benötigte 11 Ticks (neuer Korridor 9)']
+
+live_state:
+{'status': 'running',
+ 'score': 1,
+ 'tick_count': 182,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'right',
+ 'snake': [[18, 16], [17, 16], [16, 16], [15, 16]],
+ 'food': [8, 5]}
+
+================================================================================
+[2026-10-24T21:24:51.766686+00:00 | +105.786s] ACTION
+
+turn:
+10
+
+index:
+0
+
+command:
+up
+
+requested_ticks:
+9
+
+ticks:
+9
+
+direction_accepted:
+True
+
+state:
+{'status': 'running',
+ 'score': 1,
+ 'tick_count': 191,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'up',
+ 'snake': [[18, 7], [18, 8], [18, 9], [18, 10]],
+ 'food': [8, 5]}
+
+================================================================================
+[2026-10-24T21:24:55.836204+00:00 | +109.855s] ACTION
+
+turn:
+10
+
+index:
+1
+
+command:
+right
+
+requested_ticks:
+8
+
+ticks:
+8
+
+direction_accepted:
+True
+
+state:
+{'status': 'running',
+ 'score': 1,
+ 'tick_count': 199,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'right',
+ 'snake': [[26, 7], [25, 7], [24, 7], [23, 7]],
+ 'food': [8, 5]}
+
+================================================================================
+[2026-10-24T21:24:56.330261+00:00 | +110.349s] ACTION
+
+turn:
+10
+
+index:
+2
+
+command:
+down
+
+requested_ticks:
+1
+
+ticks:
+1
+
+direction_accepted:
+True
+
+state:
+{'status': 'running',
+ 'score': 1,
+ 'tick_count': 200,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'down',
+ 'snake': [[26, 8], [26, 7], [25, 7], [24, 7]],
+ 'food': [8, 5]}
+
+================================================================================
+[2026-10-24T21:24:56.331102+00:00 | +110.350s] SCREENSHOT
+
+turn:
+11
+
+source:
+turn_start
+
+screenshot:
+SNAKE_COORDINATES
+status=running
+board_width=30; board_height=18
+valid_x=0..29; valid_y=0..17
+origin=(0,0) top-left; x increases right; y increases down
+tick_seconds=0.500; tick_count=200
+direction=down
+head=(26, 8)
+body=[(26, 7), (25, 7), (24, 7)]
+food=(8, 5)
+
+state:
+{'status': 'running',
+ 'score': 1,
+ 'tick_count': 200,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'down',
+ 'snake': [[26, 8], [26, 7], [25, 7], [24, 7]],
+ 'food': [8, 5]}
+
+================================================================================
+[2026-10-24T21:24:56.331397+00:00 | +110.350s] PROMPT
+
+turn:
+11
+
+system_prompt:
+# Snake-Gamer
+
+Steuere Snake zum Futter, ohne Wand oder Körper zu berühren. Der Gamer liefert
+bei jedem Zug eine konfigurierbare TCP-Ansicht und zusätzlich den strukturierten
+Abschnitt `Exakte Zustandsanalyse`. Die Koordinatenangaben sind maßgeblich.
+
+- `@` = Kopf, `o` = Körper, `*` = Futter.
+- Oben links ist `(0,0)`; X wächst nach rechts, Y nach unten.
+- Die Kopfzeile nennt aktuelle Richtung und Sekunden pro Tick.
+- Eine entgegengesetzte Richtung ist verboten.
+- Zum bewussten Geradeausfahren verwende `wait`; wiederhole nicht die aktuelle Richtung.
+- Nähert sich der Kopf in seiner Bewegungsrichtung einer Wand, biege rechtzeitig
+  in eine erlaubte Richtung ab – auch wenn das Futter woanders liegt.
+
+Der erste Plan wird erzeugt, bevor das Spiel startet. Standardmäßig pausiert der
+Gamer Snake während der Modellberechnung, damit das Spiel bei langsamer lokaler
+Inferenz nicht ohne Steuerungsmöglichkeit in eine Wand fährt. Im experimentellen
+Live-Modus läuft Snake weiter; nutze dort die Kollisionsprognose und die Dauer der
+vorherigen Antwort. Alte Screenshots im Gespräch sind überholt; entscheide
+ausschließlich anhand des neuesten Zuges.
+
+Antworte ausschließlich im anschließend beschriebenen Decoderformat. Zeit wird
+als Anzahl vollständiger Spielticks angegeben, niemals in Millisekunden. Plane
+nur die nächsten sicheren Aktionen und beende den Plan in einer Richtung mit
+mindestens `Benötigter Sicherheitskorridor` freien Ticks. `screenshot` beobachtet
+lediglich den Zustand; es startet und stoppt das Spiel nicht. Der Gamer startet
+das Spiel automatisch.
+
+Ausgabe ausschließlich als kurze Liste ohne Leerzeichen.
+Codes: u=hoch, d=runter, l=links, r=rechts, w=Richtung halten, p=Screenshot.
+Auf u/d/l/r/w folgen genau zwei Ziffern für die Anzahl Spielticks (00 bis 99), keine Millisekunden.
+p bedeutet NICHT Start; der Gamer startet automatisch. Planende ist ! Beispiel: u,01,l,03,p!
+
+
+user_prompt:
+AKTUELLER ZUG 11. Nur dieser Zustand ist maßgeblich.
+
+Exakte Zustandsanalyse:
+Kopf=(26,8); Richtung=down; Futter=(8,5) → 18 Felder links, 3 Felder oben.
+Freie Felder bis zur Wand: links=26, rechts=3, oben=8, unten=9.
+Sofort erlaubte Richtungen: down, left, right. LLM_DELAY_TICKS=9 (letzte Antwort 4.130s). Benötigter Sicherheitskorridor am Planende=11 Ticks. Ohne Richtungswechsel: Kopf ungefähr bei (26,17), danach nur noch 0 Felder bis zur Wand; IN DIESER ANTWORT ABBIEGEN, NICHT GERADEAUS WEITERFAHREN.
+
+TCP-Ansicht zum selben Zeitpunkt (Modus=coordinates):
+```text
+SNAKE_COORDINATES
+status=running
+board_width=30; board_height=18
+valid_x=0..29; valid_y=0..17
+origin=(0,0) top-left; x increases right; y increases down
+tick_seconds=0.500; tick_count=200
+direction=down
+head=(26, 8)
+body=[(26, 7), (25, 7), (24, 7)]
+food=(8, 5)
+```
+
+Vorher ausgeführt: up 9 Ticks (angenommen=True); right 8 Ticks (angenommen=True); down 1 Ticks (angenommen=True)
+Das Spiel läuft während der Berechnung ohne Pause weiter.
+
+Wähle eine Richtung zum Futter, aber vermeide zuerst die Wand. Wenn du bewusst
+geradeaus weiterfahren willst, verwende `w`/`wait` statt die aktuelle Richtung
+noch einmal auszugeben. Bei Kollisionsprognose musst du jetzt eine andere
+erlaubte Richtung wählen. `p`/`screenshot` beobachtet nur
+und startet das Spiel nicht. Antworte exakt im vorgegebenen Ausgabeformat.
+
+
+================================================================================
+[2026-10-24T21:25:02.421050+00:00 | +116.440s] LLM_RESPONSE
+
+turn:
+11
+
+inference_seconds:
+6.089479540998582
+
+generation_metrics:
+{'cache_reused': True,
+ 'cache_status': 'reused',
+ 'prompt_tokens_processed': 511,
+ 'generated_tokens': 9,
+ 'model_seconds': 5.6946102090296336,
+ 'mask_seconds': 0.0002843340043909848}
+
+raw_response:
+l,08,d,07!
+
+actions:
+[{'command': 'left', 'ticks': 8}, {'command': 'down', 'ticks': 7}]
+
+================================================================================
+[2026-10-24T21:25:02.422012+00:00 | +116.441s] SCREENSHOT
+
+turn:
+11
+
+source:
+game_end_during_inference
+
+screenshot:
+SNAKE_COORDINATES
+status=game_over
+board_width=30; board_height=18
+valid_x=0..29; valid_y=0..17
+origin=(0,0) top-left; x increases right; y increases down
+tick_seconds=0.500; tick_count=210
+direction=down
+head=(26, 17)
+body=[(26, 16), (26, 15), (26, 14)]
+food=(8, 5)
+
+state:
+{'status': 'game_over',
+ 'score': 1,
+ 'tick_count': 210,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'down',
+ 'snake': [[26, 17], [26, 16], [26, 15], [26, 14]],
+ 'food': [8, 5]}
+
+================================================================================
+[2026-10-24T21:25:02.422085+00:00 | +116.441s] RUN_FINISHED
+
+state:
+{'status': 'game_over',
+ 'score': 1,
+ 'tick_count': 210,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'down',
+ 'snake': [[26, 17], [26, 16], [26, 15], [26, 14]],
+ 'food': [8, 5]}
+
