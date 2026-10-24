@@ -1,0 +1,985 @@
+================================================================================
+[2026-10-24T20:20:36.622669+00:00 | +0.000s] RUN_STARTED
+
+host:
+127.0.0.1
+
+port:
+8765
+
+model:
+mlx-community/Qwen3-8B-4bit
+
+output_format:
+compact
+
+prompt_file:
+/Users/ba22036/PycharmProjects/lokal_llm/src/games/snake_gamer.md
+
+system_prompt:
+# Snake-Gamer
+
+Du steuerst ein Snake-Spiel anhand von ASCII-Screenshots. Plane jeweils nur die
+nächsten wenigen Aktionen. Dein Ziel ist, möglichst viel Futter zu fressen und
+nicht mit Wand oder Körper zu kollidieren.
+
+Der erste Aktionsplan wird erzeugt, solange das Spiel noch `ready` ist. Erst
+wenn dieser Plan vollständig vorliegt, wird das Spiel gestartet. Danach läuft
+es in Echtzeit und wird während deiner LLM-Berechnungen niemals pausiert. Ein
+Screenshot zeigt dann einen vergangenen Zustand. Schätze diesen Versatz anhand
+der Tick-Dauer und vorheriger LLM-Berechnungszeiten voraus. Das gehört
+ausdrücklich zur Aufgabe.
+
+## Darstellung
+
+- `@` ist der Kopf der Schlange.
+- `o` ist ihr Körper.
+- `*` ist das Futter.
+- `|`, `-` und `+` sind tödliche Außenwände.
+- Oben links ist `(0, 0)`. X wächst nach rechts, Y nach unten.
+
+## Ausgabe
+
+Antworte ausschließlich in dem Aktionsformat, das der Gamer am Ende dieses
+System-Prompts vorgibt. Richtungsaktionen ändern die Richtung und halten sie für
+die angegebene Zeit. `wait` behält die aktuelle Richtung bei und `screenshot`
+fordert eine Zwischenansicht an. Sinnvolle Haltezeiten liegen meist zwischen
+150 und 600 ms. Der Gamer begrenzt Wartezeiten aus Sicherheitsgründen. Eine
+direkte Umkehr der Richtung ist nicht möglich. Nutze Screenshots zwischen
+Teilplänen, wenn die Lage unsicher wird.
+
+Gib kurze Pläne aus, damit neue Screenshots rechtzeitig ausgewertet werden. Die
+Zeit zum Erzeugen des nächsten Plans ist ebenfalls echte Spielzeit; plane also
+notfalls zuerst eine sichere gerade Strecke ein.
+
+Antworte ausschließlich als extrem kurze, kommaseparierte Aktionsliste ohne Leerzeichen.
+Codes: u=up, d=down, l=left, r=right, w=wait, s=screenshot.
+Nach u/d/l/r/w folgen genau drei Ziffern für 000 bis 999 Millisekunden. s hat keine Dauer.
+Jeder vollständige Plan endet zwingend mit !
+Beispiel: u,400,l,200,s!
+
+
+================================================================================
+[2026-10-24T20:20:39.952178+00:00 | +3.330s] SCREENSHOT
+
+turn:
+1
+
+source:
+turn_start
+
+screenshot:
+SNAKE  Punkte: 0  Status: ready  Richtung: right  Tick: 0.500s
++------------------------------+
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                  *           |
+|                              |
+|                              |
+|                              |
+|             oo@              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
++------------------------------+
+
+state:
+{'status': 'ready',
+ 'score': 0,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'right',
+ 'snake': [[15, 9], [14, 9], [13, 9]],
+ 'food': [18, 5]}
+
+================================================================================
+[2026-10-24T20:20:39.952353+00:00 | +3.330s] PROMPT
+
+turn:
+1
+
+system_prompt:
+# Snake-Gamer
+
+Du steuerst ein Snake-Spiel anhand von ASCII-Screenshots. Plane jeweils nur die
+nächsten wenigen Aktionen. Dein Ziel ist, möglichst viel Futter zu fressen und
+nicht mit Wand oder Körper zu kollidieren.
+
+Der erste Aktionsplan wird erzeugt, solange das Spiel noch `ready` ist. Erst
+wenn dieser Plan vollständig vorliegt, wird das Spiel gestartet. Danach läuft
+es in Echtzeit und wird während deiner LLM-Berechnungen niemals pausiert. Ein
+Screenshot zeigt dann einen vergangenen Zustand. Schätze diesen Versatz anhand
+der Tick-Dauer und vorheriger LLM-Berechnungszeiten voraus. Das gehört
+ausdrücklich zur Aufgabe.
+
+## Darstellung
+
+- `@` ist der Kopf der Schlange.
+- `o` ist ihr Körper.
+- `*` ist das Futter.
+- `|`, `-` und `+` sind tödliche Außenwände.
+- Oben links ist `(0, 0)`. X wächst nach rechts, Y nach unten.
+
+## Ausgabe
+
+Antworte ausschließlich in dem Aktionsformat, das der Gamer am Ende dieses
+System-Prompts vorgibt. Richtungsaktionen ändern die Richtung und halten sie für
+die angegebene Zeit. `wait` behält die aktuelle Richtung bei und `screenshot`
+fordert eine Zwischenansicht an. Sinnvolle Haltezeiten liegen meist zwischen
+150 und 600 ms. Der Gamer begrenzt Wartezeiten aus Sicherheitsgründen. Eine
+direkte Umkehr der Richtung ist nicht möglich. Nutze Screenshots zwischen
+Teilplänen, wenn die Lage unsicher wird.
+
+Gib kurze Pläne aus, damit neue Screenshots rechtzeitig ausgewertet werden. Die
+Zeit zum Erzeugen des nächsten Plans ist ebenfalls echte Spielzeit; plane also
+notfalls zuerst eine sichere gerade Strecke ein.
+
+Antworte ausschließlich als extrem kurze, kommaseparierte Aktionsliste ohne Leerzeichen.
+Codes: u=up, d=down, l=left, r=right, w=wait, s=screenshot.
+Nach u/d/l/r/w folgen genau drei Ziffern für 000 bis 999 Millisekunden. s hat keine Dauer.
+Jeder vollständige Plan endet zwingend mit !
+Beispiel: u,400,l,200,s!
+
+
+user_prompt:
+Plane Zug 1.
+
+Aktueller TCP-Screenshot (nur der Zustand im Moment der Aufnahme):
+```text
+SNAKE  Punkte: 0  Status: ready  Richtung: right  Tick: 0.500s
++------------------------------+
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                  *           |
+|                              |
+|                              |
+|                              |
+|             oo@              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
++------------------------------+
+```
+
+Ergebnisse der Aktionen des vorherigen Zugs:
+Keine (erster Zug).
+
+Dauer der vorherigen LLM-Berechnung: noch unbekannt (erster Zug)
+
+Das Spiel ist noch nicht gestartet. Dieser erste Plan wird vollständig vor dem Start erzeugt.
+Nach dem Start wird das Spiel niemals pausiert. Bei laufendem Spiel ist der
+Screenshot beim Eintreffen deiner Antwort ungefähr um die übliche
+LLM-Berechnungsdauer veraltet. Schätze dann die Bewegung anhand von Richtung,
+Spieltempo und bisheriger Berechnungsdauer voraus. Erzeuge jetzt eine kurze
+Aktionsliste exakt im vorgegebenen Ausgabeformat.
+
+
+================================================================================
+[2026-10-24T20:20:45.522830+00:00 | +8.900s] LLM_RESPONSE
+
+turn:
+1
+
+inference_seconds:
+5.570391250017565
+
+generation_metrics:
+{'cache_reused': False,
+ 'cache_status': 'processed,response_tokens,prepared_chat',
+ 'prompt_tokens_processed': 880,
+ 'generated_tokens': 7,
+ 'model_seconds': 5.166351957945153,
+ 'mask_seconds': 0.00016141694504767656}
+
+raw_response:
+r,600,s!
+
+actions:
+[{'command': 'right', 'milliseconds': 600}, {'command': 'screenshot', 'milliseconds': 0}]
+
+================================================================================
+[2026-10-24T20:20:45.523449+00:00 | +8.901s] GAME_STARTED
+
+turn:
+1
+
+state:
+{'status': 'running',
+ 'score': 0,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'right',
+ 'snake': [[15, 9], [14, 9], [13, 9]],
+ 'food': [18, 5]}
+
+================================================================================
+[2026-10-24T20:20:46.130871+00:00 | +9.508s] ACTION
+
+turn:
+1
+
+index:
+0
+
+command:
+right
+
+requested_milliseconds:
+600
+
+milliseconds:
+600
+
+direction_accepted:
+True
+
+state:
+{'status': 'running',
+ 'score': 0,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'right',
+ 'snake': [[17, 9], [16, 9], [15, 9]],
+ 'food': [18, 5]}
+
+================================================================================
+[2026-10-24T20:20:46.132142+00:00 | +9.509s] SCREENSHOT
+
+turn:
+1
+
+source:
+agent_action
+
+action_index:
+1
+
+screenshot:
+SNAKE  Punkte: 0  Status: running  Richtung: right  Tick: 0.500s
++------------------------------+
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                  *           |
+|                              |
+|                              |
+|                              |
+|               oo@            |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
++------------------------------+
+
+state:
+{'status': 'running',
+ 'score': 0,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'right',
+ 'snake': [[17, 9], [16, 9], [15, 9]],
+ 'food': [18, 5]}
+
+================================================================================
+[2026-10-24T20:20:46.132859+00:00 | +9.510s] ACTION
+
+turn:
+1
+
+index:
+1
+
+command:
+screenshot
+
+requested_milliseconds:
+0
+
+milliseconds:
+0
+
+screenshot:
+SNAKE  Punkte: 0  Status: running  Richtung: right  Tick: 0.500s
++------------------------------+
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                  *           |
+|                              |
+|                              |
+|                              |
+|               oo@            |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
++------------------------------+
+
+state:
+{'status': 'running',
+ 'score': 0,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'right',
+ 'snake': [[17, 9], [16, 9], [15, 9]],
+ 'food': [18, 5]}
+
+================================================================================
+[2026-10-24T20:20:46.134315+00:00 | +9.512s] SCREENSHOT
+
+turn:
+2
+
+source:
+turn_start
+
+screenshot:
+SNAKE  Punkte: 0  Status: running  Richtung: right  Tick: 0.500s
++------------------------------+
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                  *           |
+|                              |
+|                              |
+|                              |
+|               oo@            |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
++------------------------------+
+
+state:
+{'status': 'running',
+ 'score': 0,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'right',
+ 'snake': [[17, 9], [16, 9], [15, 9]],
+ 'food': [18, 5]}
+
+================================================================================
+[2026-10-24T20:20:46.134711+00:00 | +9.512s] PROMPT
+
+turn:
+2
+
+system_prompt:
+# Snake-Gamer
+
+Du steuerst ein Snake-Spiel anhand von ASCII-Screenshots. Plane jeweils nur die
+nächsten wenigen Aktionen. Dein Ziel ist, möglichst viel Futter zu fressen und
+nicht mit Wand oder Körper zu kollidieren.
+
+Der erste Aktionsplan wird erzeugt, solange das Spiel noch `ready` ist. Erst
+wenn dieser Plan vollständig vorliegt, wird das Spiel gestartet. Danach läuft
+es in Echtzeit und wird während deiner LLM-Berechnungen niemals pausiert. Ein
+Screenshot zeigt dann einen vergangenen Zustand. Schätze diesen Versatz anhand
+der Tick-Dauer und vorheriger LLM-Berechnungszeiten voraus. Das gehört
+ausdrücklich zur Aufgabe.
+
+## Darstellung
+
+- `@` ist der Kopf der Schlange.
+- `o` ist ihr Körper.
+- `*` ist das Futter.
+- `|`, `-` und `+` sind tödliche Außenwände.
+- Oben links ist `(0, 0)`. X wächst nach rechts, Y nach unten.
+
+## Ausgabe
+
+Antworte ausschließlich in dem Aktionsformat, das der Gamer am Ende dieses
+System-Prompts vorgibt. Richtungsaktionen ändern die Richtung und halten sie für
+die angegebene Zeit. `wait` behält die aktuelle Richtung bei und `screenshot`
+fordert eine Zwischenansicht an. Sinnvolle Haltezeiten liegen meist zwischen
+150 und 600 ms. Der Gamer begrenzt Wartezeiten aus Sicherheitsgründen. Eine
+direkte Umkehr der Richtung ist nicht möglich. Nutze Screenshots zwischen
+Teilplänen, wenn die Lage unsicher wird.
+
+Gib kurze Pläne aus, damit neue Screenshots rechtzeitig ausgewertet werden. Die
+Zeit zum Erzeugen des nächsten Plans ist ebenfalls echte Spielzeit; plane also
+notfalls zuerst eine sichere gerade Strecke ein.
+
+Antworte ausschließlich als extrem kurze, kommaseparierte Aktionsliste ohne Leerzeichen.
+Codes: u=up, d=down, l=left, r=right, w=wait, s=screenshot.
+Nach u/d/l/r/w folgen genau drei Ziffern für 000 bis 999 Millisekunden. s hat keine Dauer.
+Jeder vollständige Plan endet zwingend mit !
+Beispiel: u,400,l,200,s!
+
+
+user_prompt:
+Plane Zug 2.
+
+Aktueller TCP-Screenshot (nur der Zustand im Moment der Aufnahme):
+```text
+SNAKE  Punkte: 0  Status: running  Richtung: right  Tick: 0.500s
++------------------------------+
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                  *           |
+|                              |
+|                              |
+|                              |
+|               oo@            |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
++------------------------------+
+```
+
+Ergebnisse der Aktionen des vorherigen Zugs:
+[
+  {
+    "index": 0,
+    "command": "right",
+    "requested_milliseconds": 600,
+    "milliseconds": 600,
+    "direction_accepted": true,
+    "state": {
+      "status": "running",
+      "score": 0,
+      "width": 30,
+      "height": 18,
+      "tick_seconds": 0.5,
+      "direction": "right",
+      "snake": [
+        [
+          17,
+          9
+        ],
+        [
+          16,
+          9
+        ],
+        [
+          15,
+          9
+        ]
+      ],
+      "food": [
+        18,
+        5
+      ]
+    }
+  },
+  {
+    "index": 1,
+    "command": "screenshot",
+    "requested_milliseconds": 0,
+    "milliseconds": 0,
+    "screenshot": "SNAKE  Punkte: 0  Status: running  Richtung: right  Tick: 0.500s\n+------------------------------+\n|                              |\n|                              |\n|                              |\n|                              |\n|                              |\n|                  *           |\n|                              |\n|                              |\n|                              |\n|               oo@            |\n|                              |\n|                              |\n|                              |\n|                              |\n|                              |\n|                              |\n|                              |\n|                              |\n+------------------------------+",
+    "state": {
+      "status": "running",
+      "score": 0,
+      "width": 30,
+      "height": 18,
+      "tick_seconds": 0.5,
+      "direction": "right",
+      "snake": [
+        [
+          17,
+          9
+        ],
+        [
+          16,
+          9
+        ],
+        [
+          15,
+          9
+        ]
+      ],
+      "food": [
+        18,
+        5
+      ]
+    }
+  }
+]
+
+Dauer der vorherigen LLM-Berechnung: 5.570 Sekunden
+
+Das Spiel läuft während deiner Berechnung ohne Pause weiter.
+Nach dem Start wird das Spiel niemals pausiert. Bei laufendem Spiel ist der
+Screenshot beim Eintreffen deiner Antwort ungefähr um die übliche
+LLM-Berechnungsdauer veraltet. Schätze dann die Bewegung anhand von Richtung,
+Spieltempo und bisheriger Berechnungsdauer voraus. Erzeuge jetzt eine kurze
+Aktionsliste exakt im vorgegebenen Ausgabeformat.
+
+
+================================================================================
+[2026-10-24T20:20:51.026370+00:00 | +14.404s] LLM_RESPONSE
+
+turn:
+2
+
+inference_seconds:
+4.891282333002891
+
+generation_metrics:
+{'cache_reused': True,
+ 'cache_status': 'reused',
+ 'prompt_tokens_processed': 722,
+ 'generated_tokens': 7,
+ 'model_seconds': 4.507703416980803,
+ 'mask_seconds': 0.00016308302292600274}
+
+raw_response:
+r,450,s!
+
+actions:
+[{'command': 'right', 'milliseconds': 450}, {'command': 'screenshot', 'milliseconds': 0}]
+
+================================================================================
+[2026-10-24T20:20:51.483603+00:00 | +14.861s] ACTION
+
+turn:
+2
+
+index:
+0
+
+command:
+right
+
+requested_milliseconds:
+450
+
+milliseconds:
+450
+
+direction_accepted:
+True
+
+state:
+{'status': 'running',
+ 'score': 0,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'right',
+ 'snake': [[27, 9], [26, 9], [25, 9]],
+ 'food': [18, 5]}
+
+================================================================================
+[2026-10-24T20:20:51.484422+00:00 | +14.862s] SCREENSHOT
+
+turn:
+2
+
+source:
+agent_action
+
+action_index:
+1
+
+screenshot:
+SNAKE  Punkte: 0  Status: running  Richtung: right  Tick: 0.500s
++------------------------------+
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                  *           |
+|                              |
+|                              |
+|                              |
+|                         oo@  |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
++------------------------------+
+
+state:
+{'status': 'running',
+ 'score': 0,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'right',
+ 'snake': [[27, 9], [26, 9], [25, 9]],
+ 'food': [18, 5]}
+
+================================================================================
+[2026-10-24T20:20:51.484567+00:00 | +14.862s] ACTION
+
+turn:
+2
+
+index:
+1
+
+command:
+screenshot
+
+requested_milliseconds:
+0
+
+milliseconds:
+0
+
+screenshot:
+SNAKE  Punkte: 0  Status: running  Richtung: right  Tick: 0.500s
++------------------------------+
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                  *           |
+|                              |
+|                              |
+|                              |
+|                         oo@  |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
++------------------------------+
+
+state:
+{'status': 'running',
+ 'score': 0,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'right',
+ 'snake': [[27, 9], [26, 9], [25, 9]],
+ 'food': [18, 5]}
+
+================================================================================
+[2026-10-24T20:20:51.485597+00:00 | +14.863s] SCREENSHOT
+
+turn:
+3
+
+source:
+turn_start
+
+screenshot:
+SNAKE  Punkte: 0  Status: running  Richtung: right  Tick: 0.500s
++------------------------------+
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                  *           |
+|                              |
+|                              |
+|                              |
+|                         oo@  |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
++------------------------------+
+
+state:
+{'status': 'running',
+ 'score': 0,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'right',
+ 'snake': [[27, 9], [26, 9], [25, 9]],
+ 'food': [18, 5]}
+
+================================================================================
+[2026-10-24T20:20:51.486178+00:00 | +14.864s] PROMPT
+
+turn:
+3
+
+system_prompt:
+# Snake-Gamer
+
+Du steuerst ein Snake-Spiel anhand von ASCII-Screenshots. Plane jeweils nur die
+nächsten wenigen Aktionen. Dein Ziel ist, möglichst viel Futter zu fressen und
+nicht mit Wand oder Körper zu kollidieren.
+
+Der erste Aktionsplan wird erzeugt, solange das Spiel noch `ready` ist. Erst
+wenn dieser Plan vollständig vorliegt, wird das Spiel gestartet. Danach läuft
+es in Echtzeit und wird während deiner LLM-Berechnungen niemals pausiert. Ein
+Screenshot zeigt dann einen vergangenen Zustand. Schätze diesen Versatz anhand
+der Tick-Dauer und vorheriger LLM-Berechnungszeiten voraus. Das gehört
+ausdrücklich zur Aufgabe.
+
+## Darstellung
+
+- `@` ist der Kopf der Schlange.
+- `o` ist ihr Körper.
+- `*` ist das Futter.
+- `|`, `-` und `+` sind tödliche Außenwände.
+- Oben links ist `(0, 0)`. X wächst nach rechts, Y nach unten.
+
+## Ausgabe
+
+Antworte ausschließlich in dem Aktionsformat, das der Gamer am Ende dieses
+System-Prompts vorgibt. Richtungsaktionen ändern die Richtung und halten sie für
+die angegebene Zeit. `wait` behält die aktuelle Richtung bei und `screenshot`
+fordert eine Zwischenansicht an. Sinnvolle Haltezeiten liegen meist zwischen
+150 und 600 ms. Der Gamer begrenzt Wartezeiten aus Sicherheitsgründen. Eine
+direkte Umkehr der Richtung ist nicht möglich. Nutze Screenshots zwischen
+Teilplänen, wenn die Lage unsicher wird.
+
+Gib kurze Pläne aus, damit neue Screenshots rechtzeitig ausgewertet werden. Die
+Zeit zum Erzeugen des nächsten Plans ist ebenfalls echte Spielzeit; plane also
+notfalls zuerst eine sichere gerade Strecke ein.
+
+Antworte ausschließlich als extrem kurze, kommaseparierte Aktionsliste ohne Leerzeichen.
+Codes: u=up, d=down, l=left, r=right, w=wait, s=screenshot.
+Nach u/d/l/r/w folgen genau drei Ziffern für 000 bis 999 Millisekunden. s hat keine Dauer.
+Jeder vollständige Plan endet zwingend mit !
+Beispiel: u,400,l,200,s!
+
+
+user_prompt:
+Plane Zug 3.
+
+Aktueller TCP-Screenshot (nur der Zustand im Moment der Aufnahme):
+```text
+SNAKE  Punkte: 0  Status: running  Richtung: right  Tick: 0.500s
++------------------------------+
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                  *           |
+|                              |
+|                              |
+|                              |
+|                         oo@  |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
++------------------------------+
+```
+
+Ergebnisse der Aktionen des vorherigen Zugs:
+[
+  {
+    "index": 0,
+    "command": "right",
+    "requested_milliseconds": 450,
+    "milliseconds": 450,
+    "direction_accepted": true,
+    "state": {
+      "status": "running",
+      "score": 0,
+      "width": 30,
+      "height": 18,
+      "tick_seconds": 0.5,
+      "direction": "right",
+      "snake": [
+        [
+          27,
+          9
+        ],
+        [
+          26,
+          9
+        ],
+        [
+          25,
+          9
+        ]
+      ],
+      "food": [
+        18,
+        5
+      ]
+    }
+  },
+  {
+    "index": 1,
+    "command": "screenshot",
+    "requested_milliseconds": 0,
+    "milliseconds": 0,
+    "screenshot": "SNAKE  Punkte: 0  Status: running  Richtung: right  Tick: 0.500s\n+------------------------------+\n|                              |\n|                              |\n|                              |\n|                              |\n|                              |\n|                  *           |\n|                              |\n|                              |\n|                              |\n|                         oo@  |\n|                              |\n|                              |\n|                              |\n|                              |\n|                              |\n|                              |\n|                              |\n|                              |\n+------------------------------+",
+    "state": {
+      "status": "running",
+      "score": 0,
+      "width": 30,
+      "height": 18,
+      "tick_seconds": 0.5,
+      "direction": "right",
+      "snake": [
+        [
+          27,
+          9
+        ],
+        [
+          26,
+          9
+        ],
+        [
+          25,
+          9
+        ]
+      ],
+      "food": [
+        18,
+        5
+      ]
+    }
+  }
+]
+
+Dauer der vorherigen LLM-Berechnung: 4.891 Sekunden
+
+Das Spiel läuft während deiner Berechnung ohne Pause weiter.
+Nach dem Start wird das Spiel niemals pausiert. Bei laufendem Spiel ist der
+Screenshot beim Eintreffen deiner Antwort ungefähr um die übliche
+LLM-Berechnungsdauer veraltet. Schätze dann die Bewegung anhand von Richtung,
+Spieltempo und bisheriger Berechnungsdauer voraus. Erzeuge jetzt eine kurze
+Aktionsliste exakt im vorgegebenen Ausgabeformat.
+
+
+================================================================================
+[2026-10-24T20:20:56.395985+00:00 | +19.773s] LLM_RESPONSE
+
+turn:
+3
+
+inference_seconds:
+4.9096608749823645
+
+generation_metrics:
+{'cache_reused': True,
+ 'cache_status': 'reused',
+ 'prompt_tokens_processed': 722,
+ 'generated_tokens': 7,
+ 'model_seconds': 4.519602707994636,
+ 'mask_seconds': 0.00016554089961573482}
+
+raw_response:
+r,450,s!
+
+actions:
+[{'command': 'right', 'milliseconds': 450}, {'command': 'screenshot', 'milliseconds': 0}]
+
+================================================================================
+[2026-10-24T20:20:56.396610+00:00 | +19.774s] SCREENSHOT
+
+turn:
+3
+
+source:
+game_end_during_inference
+
+screenshot:
+SNAKE  Punkte: 0  Status: game_over  Richtung: right  Tick: 0.500s
++------------------------------+
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                  *           |
+|                              |
+|                              |
+|                              |
+|                           oo@|
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
+|                              |
++------------------------------+
+
+state:
+{'status': 'game_over',
+ 'score': 0,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'right',
+ 'snake': [[29, 9], [28, 9], [27, 9]],
+ 'food': [18, 5]}
+
+================================================================================
+[2026-10-24T20:20:56.396677+00:00 | +19.774s] RUN_FINISHED
+
+state:
+{'status': 'game_over',
+ 'score': 0,
+ 'width': 30,
+ 'height': 18,
+ 'tick_seconds': 0.5,
+ 'direction': 'right',
+ 'snake': [[29, 9], [28, 9], [27, 9]],
+ 'food': [18, 5]}
+

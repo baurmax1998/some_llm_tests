@@ -11,6 +11,7 @@ zulässig.
 
 from __future__ import annotations
 
+import argparse
 import curses
 import json
 import random
@@ -40,9 +41,11 @@ HELP = {
     "tcp": {
         "format": "eine JSON-Anfrage je Zeile; alternativ einfacher Textbefehl",
         "commands": ["start", "pause", "reset", "up", "down", "left", "right", "state", "screenshot", "help", "quit"],
+        "screenshot_modes": ["ascii", "coordinates"],
         "examples": [
             {"command": "start"},
             {"command": "direction", "direction": "up"},
+            {"command": "screenshot", "mode": "coordinates"},
             {"command": "state"},
         ],
     },
@@ -80,6 +83,7 @@ class SnakeGame:
             self._pending_direction = "right"
             self.food: Point | None = None
             self.score = 0
+            self.tick_count = 0
             self.status = "ready"
             self._place_food()
 
@@ -108,6 +112,7 @@ class SnakeGame:
         with self._lock:
             if self.status != "running":
                 return
+            self.tick_count += 1
             self.direction = self._pending_direction
             dx, dy = DIRECTIONS[self.direction]
             head_x, head_y = self.snake[0]
@@ -132,6 +137,7 @@ class SnakeGame:
             return {
                 "status": self.status,
                 "score": self.score,
+                "tick_count": self.tick_count,
                 "width": self.config.width,
                 "height": self.config.height,
                 "tick_seconds": self.config.tick_seconds,
@@ -148,7 +154,7 @@ class SnakeGame:
         head = tuple(state["snake"][0])
         food = tuple(state["food"]) if state["food"] is not None else None
         lines = [
-            f"SNAKE  Punkte: {state['score']}  Status: {state['status']}  Richtung: {state['direction']}  Tick: {state['tick_seconds']:.3f}s",
+            f"SNAKE  Punkte: {state['score']}  Status: {state['status']}  Richtung: {state['direction']}  Tick: {state['tick_seconds']:.3f}s  Tick-Nr: {state['tick_count']}",
             "+" + "-" * width + "+",
         ]
         for y in range(height):
@@ -159,6 +165,25 @@ class SnakeGame:
             lines.append("|" + "".join(cells) + "|")
         lines.append("+" + "-" * width + "+")
         return "\n".join(lines)
+
+    def coordinate_snapshot(self) -> str:
+        """Liefert eine LLM-freundliche Ansicht ohne räumliche ASCII-Deutung."""
+        state = self.snapshot()
+        head = tuple(state["snake"][0])
+        body = [tuple(point) for point in state["snake"][1:]]
+        food = tuple(state["food"]) if state["food"] is not None else None
+        return "\n".join([
+            "SNAKE_COORDINATES",
+            f"status={state['status']}",
+            f"board_width={state['width']}; board_height={state['height']}",
+            f"valid_x=0..{state['width'] - 1}; valid_y=0..{state['height'] - 1}",
+            "origin=(0,0) top-left; x increases right; y increases down",
+            f"tick_seconds={state['tick_seconds']:.3f}; tick_count={state['tick_count']}",
+            f"direction={state['direction']}",
+            f"head={head}",
+            f"body={body}",
+            f"food={food}",
+        ])
 
     def _place_food(self) -> None:
         free = [
@@ -209,7 +234,19 @@ class SnakeController:
             if command == "state":
                 return self._ok()
             if command == "screenshot":
-                return {"ok": True, "screenshot": self.game.ascii_snapshot(), "state": self.game.snapshot()}
+                mode = str(payload.get("mode", "ascii")).lower()
+                if mode == "ascii":
+                    screenshot = self.game.ascii_snapshot()
+                elif mode == "coordinates":
+                    screenshot = self.game.coordinate_snapshot()
+                else:
+                    raise ValueError("Screenshot-Modus muss 'ascii' oder 'coordinates' sein.")
+                return {
+                    "ok": True,
+                    "screenshot_mode": mode,
+                    "screenshot": screenshot,
+                    "state": self.game.snapshot(),
+                }
             if command == "help":
                 return {"ok": True, "help": HELP, "state": self.game.snapshot()}
             if command == "quit":
@@ -338,10 +375,20 @@ def _run_ui(screen: Any, game: SnakeGame, controller: SnakeController, host: str
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description="ASCII-Snake mit lokaler TCP-API")
+    parser.add_argument(
+        "--tick-time",
+        "--speed",
+        dest="tick_seconds",
+        type=float,
+        default=GameConfig.tick_seconds,
+        help="Sekunden pro Spielschritt; größere Werte sind langsamer (Standard: 0.20)",
+    )
+    args = parser.parse_args()
     host = "127.0.0.1"
     port = 8765
     try:
-        game = SnakeGame(GameConfig())
+        game = SnakeGame(GameConfig(tick_seconds=args.tick_seconds))
         stop_event = threading.Event()
         controller = SnakeController(game, stop_event)
         server = SnakeTCPServer((host, port), controller)

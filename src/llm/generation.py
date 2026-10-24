@@ -20,6 +20,7 @@ def generate(
     should_cancel: Callable[[], bool] | None = None,
     output_validator: Callable[[str], Any] | None = None,
     system_prompt: str | None = None,
+    prepare_backend: bool = True,
 ) -> GenerationTrace:
     if max_new_tokens <= 0:
         raise ValueError("max_new_tokens muss positiv sein")
@@ -27,10 +28,11 @@ def generate(
     rng = np.random.default_rng(seed)
     generated_ids: list[int] = []
     previous = None
-    if system_prompt is None:
-        backend.prepare_prompt(prompt)
-    else:
-        backend.prepare_prompt(prompt, system_prompt=system_prompt)
+    if prepare_backend:
+        if system_prompt is None:
+            backend.prepare_prompt(prompt)
+        else:
+            backend.prepare_prompt(prompt, system_prompt=system_prompt)
 
     try:
         for step in range(max_new_tokens):

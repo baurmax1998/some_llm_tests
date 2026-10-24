@@ -7,6 +7,7 @@ from .sampling import (
     sample_token,
     softmax_float32,
 )
+from .regex import OutlinesRegexConstraint
 from .schema import (
     OutlinesSchemaConstraint,
     SchemaConstraint,
@@ -16,6 +17,7 @@ from .schema import (
 
 __all__ = [
     "ConstraintDeadEndError",
+    "OutlinesRegexConstraint",
     "OutlinesSchemaConstraint",
     "SamplingResult",
     "SchemaConstraint",

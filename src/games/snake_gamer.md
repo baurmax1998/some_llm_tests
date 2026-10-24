@@ -1,42 +1,25 @@
 # Snake-Gamer
 
-Du steuerst ein Snake-Spiel anhand von ASCII-Screenshots. Plane jeweils nur die
-nächsten wenigen Aktionen. Dein Ziel ist, möglichst viel Futter zu fressen und
-nicht mit Wand oder Körper zu kollidieren.
+Steuere Snake zum Futter, ohne Wand oder Körper zu berühren. Der Gamer liefert
+bei jedem Zug eine konfigurierbare TCP-Ansicht und zusätzlich den strukturierten
+Abschnitt `Exakte Zustandsanalyse`. Die Koordinatenangaben sind maßgeblich.
 
-Das Spiel läuft in Echtzeit und wird während deiner LLM-Berechnung niemals
-pausiert. Der Screenshot zeigt deshalb einen vergangenen Zustand. Wenn deine
-Antwort fertig ist, ist die Schlange bereits weitergelaufen. Schätze diesen
-Versatz anhand der angegebenen Tick-Dauer und der Dauer vorheriger
-LLM-Berechnungen voraus. Das gehört ausdrücklich zur Aufgabe.
+- `@` = Kopf, `o` = Körper, `*` = Futter.
+- Oben links ist `(0,0)`; X wächst nach rechts, Y nach unten.
+- Die Kopfzeile nennt aktuelle Richtung und Sekunden pro Tick.
+- Eine entgegengesetzte Richtung ist verboten.
+- Zum bewussten Geradeausfahren verwende `wait`; wiederhole nicht die aktuelle Richtung.
+- Nähert sich der Kopf in seiner Bewegungsrichtung einer Wand, biege rechtzeitig
+  in eine erlaubte Richtung ab – auch wenn das Futter woanders liegt.
 
-## Darstellung
+Der erste Plan wird erzeugt, bevor das Spiel startet. Danach läuft Snake während
+der Modellberechnung weiter. Nutze deshalb die angegebene Kollisionsprognose und
+die Dauer der vorherigen Antwort. Alte Screenshots im Gespräch sind überholt;
+entscheide ausschließlich anhand des neuesten Zuges.
 
-- `@` ist der Kopf der Schlange.
-- `o` ist ihr Körper.
-- `*` ist das Futter.
-- `|`, `-` und `+` sind tödliche Außenwände.
-- Oben links ist `(0, 0)`. X wächst nach rechts, Y nach unten.
-
-## Ausgabe
-
-Antworte ausschließlich mit dem vom Decoder verlangten JSON-Objekt. Es enthält
-eine Liste `actions`. Jede Aktion besitzt genau:
-
-- `command`: `up`, `down`, `left`, `right`, `wait` oder `screenshot`
-- `milliseconds`: eine ganze Zahl
-
-Eine Richtungsaktion ändert die Richtung und hält sie anschließend für die
-angegebene Zeit. `wait` behält die aktuelle Richtung für diese Zeit bei.
-`screenshot` fordert eine Zwischenansicht an; dafür soll `milliseconds` 0 sein.
-Sinnvolle Haltezeiten liegen meist zwischen 150 und 600 ms. Der Gamer begrenzt
-Wartezeiten aus Sicherheitsgründen. Eine direkte Umkehr der Richtung ist nicht
-möglich. Nutze Screenshots zwischen Teilplänen, wenn die Lage unsicher wird.
-
-Beispiel:
-
-{"actions":[{"command":"up","milliseconds":400},{"command":"screenshot","milliseconds":0}]}
-
-Gib kurze Pläne aus, damit neue Screenshots rechtzeitig ausgewertet werden. Die
-Zeit zum Erzeugen des nächsten Plans ist ebenfalls echte Spielzeit; plane also
-notfalls zuerst eine sichere gerade Strecke ein.
+Antworte ausschließlich im anschließend beschriebenen Decoderformat. Zeit wird
+als Anzahl vollständiger Spielticks angegeben, niemals in Millisekunden. Plane
+nur die nächsten sicheren Aktionen und beende den Plan in einer Richtung mit
+mindestens `Benötigter Sicherheitskorridor` freien Ticks. `screenshot` beobachtet
+lediglich den Zustand; es startet und stoppt das Spiel nicht. Der Gamer startet
+das Spiel automatisch.
