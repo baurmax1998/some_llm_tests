@@ -7,8 +7,8 @@ und Endpunktlogik bleiben SIC-Programme. Ein vollständiges Beispiel liegt in
 ## Start
 
 ```bash
-sic build examples/todo/web.sic
-sic serve examples/todo/web.sic
+sic build examples/todo/app.sic
+sic serve examples/todo/app.sic
 ```
 
 `build` wertet alle Page-Goals aus und erzeugt HTML mit eingebettetem CSS,
@@ -17,36 +17,74 @@ startet FastAPI mit Host und Port aus der SIC-Konfiguration.
 
 ## Konfiguration
 
-`web.sic` liefert einen Record:
+`app.sic` liefert den Standardbibliothekstyp `App::web`. Erforderlich sind nur
+Port, Seiten und Endpunkte:
 
 ```sic
-goal app = {
-    title: "Meine App",
-    host: "127.0.0.1",
+goal app: App::web = {
     port: 8000,
-    output: "dist",
-    pages: ["page.sic"],
+    pages: ["frontend/app.sic"],
     endpoints: [
-        {name: "todos", method: "GET", path: "/api/todos", source: "todos.sic"}
+        {name: "listTodos", method: "GET", path: "/api/todos", source: "backend/list_todos.sic"}
     ]
 }
 ```
 
 Alle Pfade sind relativ zur Konfiguration und dürfen deren Projektverzeichnis
-nicht verlassen. Änderungen an der Konfiguration oder den Routen benötigen
-aktuell einen Neustart. Endpunktprogramme werden dagegen anhand ihres
-Änderungszeitpunkts vor einer Anfrage automatisch neu kompiliert.
+nicht verlassen. Titel (`"SIC App"`), Host (`"127.0.0.1"`) und Ausgabeordner
+(`.out`) besitzen Defaults. Jeder Endpunkt wird automatisch unter
+`name::backend` registriert; eine zusätzliche `modules`-Liste ist dafür nicht
+nötig. Änderungen an Konfiguration oder Routen benötigen aktuell einen
+Neustart. Endpunktprogramme werden anhand ihres Änderungszeitpunkts vor einer
+Anfrage automatisch neu kompiliert.
+
+## Komponenten
+
+HTML wird über zwei kleine, sichere Bausteine erzeugt:
+
+```sic
+text::web("Text <wird escaped>")
+element::web("p", {"class": "intro"}, [child])
+```
+
+`element` nimmt Tag, `Map<String, String>` mit Attributen und `List<Html::web>`
+mit bereits gerenderten Kindern entgegen und liefert selbst `Html::web`.
+Dadurch kann HTML nicht mit beliebigen Strings verwechselt werden. Attributwerte
+werden ebenfalls escaped. Void-Elemente wie `input` benötigen eine leere Kinderliste.
+
+Eine wiederverwendbare Komponente ist ein normales SIC-Modul:
+
+```sic
+goal card: Html::web = element::web("article", {"class": "card"}, [heading])
+let heading = element::web("h2", {"class": "title"}, [
+    text::web(title: String)
+])
+```
+
+Nach der Registrierung als Modul `card` im Paket `components` wird sie mit
+benannten, statisch geprüften Argumenten zusammengesetzt:
+
+```sic
+goal pageHtml: Html::web = card::frontend(title: "Hallo")
+```
+
+Jedes `let` eines Moduls ist ebenfalls exportierbar. Dadurch können kleine
+Komponenten intern bleiben oder gezielt von anderen Modulen zusammengesetzt
+werden. Das Todo-Beispiel trennt Layout, Todo-Oberfläche und Browserverhalten
+unter `examples/todo/frontend/`. Wenn Modul und Goal gleich heißen, genügt der
+kurze Paketpfad `layout::frontend` statt `layout::layout::frontend`.
 
 ## Seiten
 
-Ein Page-Goal liefert `output`, `title`, `html`, `css` und `js`:
+Ein Page-Goal hat den Typ `Page::web` aus der Web-Standardbibliothek. Dieser
+Typ verlangt die Felder `output`, `title`, `html`, `css` und `js` als Strings:
 
 ```sic
-goal page = {
+goal page: Page::web = {
     output: "index.html",
     title: "Todos",
-    html: "<button data-sic-call=\"todos\">Laden</button><pre data-sic-output=\"todos\"></pre>",
-    css: "button { font: inherit; }",
+    html: todoPage::frontend(),
+    css: "",
     js: "sic.call(\"todos\").then(console.log);"
 }
 ```
@@ -64,6 +102,43 @@ Zusätzlich unterstützt der Klebecode:
 
 In mehrzeiligen SIC-String-Buildern müssen literale JavaScript- und
 CSS-Klammern als `{{` und `}}` geschrieben werden.
+
+## Deklarative Apps
+
+Alternativ zu `Page::web` kann eine Frontend-Datei direkt `View::web` liefern.
+Der Build verwendet dann `index.html` und den Projekttitel. Views werden
+unmittelbar zusammengesetzt; eigene State-, Action- oder Funktionsdeklarationen
+sind nicht nötig:
+
+```sic
+goal view: View::web =
+    Column::web([
+        Input::web(
+            placeholder: "Neue Aufgabe",
+            on_submit: title => createTodo::backend(id: nextId, title: title)
+        ),
+        ListView::web(todos.map(todo =>
+            Row::web([
+                Checkbox::web(
+                    todo.done,
+                    on_change: _ => toggleTodo::backend(id: todo.id)
+                ),
+                Text::web(todo.title),
+                Button::web(
+                    "Löschen",
+                    on_click: _ => deleteTodo::backend(id: todo.id)
+                )
+            ])
+        ))
+    ])
+
+let todos = listTodos::backend()
+let nextId = todos.count() + 1
+```
+
+Event-Lambdas werden beim Build als Browseraktionen erfasst, nicht ausgeführt.
+Nach einem erfolgreichen Backend-Aufruf lädt die Runtime die App neu, wodurch
+`listTodos::backend()` erneut ausgewertet wird.
 
 ## Endpunkte
 

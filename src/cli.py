@@ -149,11 +149,11 @@ def build_parser() -> argparse.ArgumentParser:
     generate_parser.set_defaults(handler=command_generate)
 
     web_build_parser = commands.add_parser("build", help="SIC-Webseiten zu HTML/CSS/JS bauen")
-    web_build_parser.add_argument("config", nargs="?", default="web.sic")
+    web_build_parser.add_argument("config", nargs="?", default="app.sic")
     web_build_parser.set_defaults(handler=command_build)
 
     serve_parser = commands.add_parser("serve", help="SIC-Webprojekt mit FastAPI starten")
-    serve_parser.add_argument("config", nargs="?", default="web.sic")
+    serve_parser.add_argument("config", nargs="?", default="app.sic")
     serve_parser.add_argument("--reload", action="store_true")
     serve_parser.set_defaults(handler=command_serve)
 

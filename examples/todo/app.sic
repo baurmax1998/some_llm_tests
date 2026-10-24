@@ -1,0 +1,10 @@
+goal app: App::web = {
+    port: 8000,
+    pages: ["frontend/app.sic"],
+    endpoints: [
+        {name: "listTodos", method: "GET", path: "/api/todos", source: "backend/list_todos.sic"},
+        {name: "createTodo", method: "POST", path: "/api/todos", source: "backend/create_todo.sic"},
+        {name: "toggleTodo", method: "PATCH", path: "/api/todos/{id}", source: "backend/toggle_todo.sic"},
+        {name: "deleteTodo", method: "DELETE", path: "/api/todos/{id}", source: "backend/delete_todo.sic"}
+    ]
+}

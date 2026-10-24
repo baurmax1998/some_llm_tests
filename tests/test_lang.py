@@ -57,6 +57,23 @@ Du hast {messages.count()} Nachrichten.
     )
 
 
+def test_declarative_web_app_with_mapped_views_and_event_lambdas():
+    source = '''
+    goal view: View::web = Column::web([
+        Input::web(placeholder: "Neu", on_submit: title => true),
+        ListView::web(todos.map(todo => Row::web([
+            Checkbox::web(todo.done, on_change: _ => true),
+            Text::web(todo.title),
+            Button::web("Löschen", on_click: _ => true)
+        ])))
+    ])
+    let todos = [{title: "Test", done: false}]
+    '''
+    result = run(source).value
+    assert "sic-column" in result
+    assert "Test" in result
+
+
 def test_if_fold_and_forward_function():
     source = """
     goal total: Int = calculate_total(orders)

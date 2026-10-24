@@ -15,6 +15,7 @@ class TypeRef:
     name: str
     arguments: tuple[TypeRef, ...] = ()
     nullable: bool = False
+    origin: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

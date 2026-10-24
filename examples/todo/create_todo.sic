@@ -1,6 +1,0 @@
-goal response: Todo =
-    if saved then todo else err persistenceError = "Todo konnte nicht gespeichert werden"
-let saved = write_json::files::std(updated, "todos.json")
-let updated: List<Todo> = todos + [todo]
-let todos = read_json::files::std("todos.json")
-let todo = {id: todos.count() + 1, title: title: String, completed: false}

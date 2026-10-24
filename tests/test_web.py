@@ -1,7 +1,9 @@
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
+from src.lang import LangTypeError
 from src.web import build_web, create_app, load_web_config
 
 
@@ -9,11 +11,14 @@ def web_project(tmp_path: Path) -> Path:
     config = tmp_path / "web.sic"
     config.write_text(
         '''
-        goal app = {
+        goal app: App::web = {
             title: "Test App",
             host: "127.0.0.1",
             port: 8123,
-            output: "dist",
+            output: ".out",
+            modules: [
+                {module: "ui", package: "components", source: "card.sic"}
+            ],
             pages: ["page.sic"],
             endpoints: [
                 {name: "greet", method: "POST", path: "/api/greet", source: "greet.sic"}
@@ -22,13 +27,21 @@ def web_project(tmp_path: Path) -> Path:
         ''',
         encoding="utf-8",
     )
+    (tmp_path / "card.sic").write_text(
+        '''
+        goal card: Html::web = element::web("article", {"class": "card"}, [
+            element::web("h1", {"class": "title"}, [text::web(name: String)])
+        ])
+        ''',
+        encoding="utf-8",
+    )
     (tmp_path / "page.sic").write_text(
         '''
-        goal page = {
+        goal page: Page::web = {
             output: "index.html",
             title: "Start",
-            html: "<h1>SIC</h1><form data-sic-submit=\\"greet\\"></form>",
-            css: "h1 { color: red; }",
+            html: card::ui::components(name: "SIC"),
+            css: "",
             js: "sic.call(\\"greet\\", {name: \\"Ada\\"});"
         }
         ''',
@@ -40,6 +53,25 @@ def web_project(tmp_path: Path) -> Path:
     return config
 
 
+def test_minimal_typed_app_uses_web_defaults(tmp_path):
+    config_path = tmp_path / "app.sic"
+    config_path.write_text(
+        '''
+        goal app: App::web = {
+            port: 8000,
+            pages: [],
+            endpoints: []
+        }
+        ''',
+        encoding="utf-8",
+    )
+    config = load_web_config(config_path)
+    assert config.title == "SIC App"
+    assert config.host == "127.0.0.1"
+    assert config.output == tmp_path / ".out"
+    assert config.modules == ()
+
+
 def test_sic_web_config_and_static_build(tmp_path):
     config_path = web_project(tmp_path)
     config = load_web_config(config_path)
@@ -47,11 +79,48 @@ def test_sic_web_config_and_static_build(tmp_path):
     assert config.endpoints[0].name == "greet"
 
     generated = build_web(config_path)
-    assert generated == [tmp_path / "dist" / "index.html"]
+    assert generated == [tmp_path / ".out" / "index.html"]
     document = generated[0].read_text(encoding="utf-8")
-    assert "<h1>SIC</h1>" in document
+    assert '<article class="card"><h1 class="title">SIC</h1></article>' in document
     assert 'window.sic = {call' in document
     assert '"greet":{"method":"POST","path":"/api/greet"}' in document
+
+
+def test_web_goal_requires_standard_library_type(tmp_path):
+    config_path = web_project(tmp_path)
+    page_path = tmp_path / "page.sic"
+    page_path.write_text(
+        '''
+        goal page = {
+            output: "index.html",
+            title: "Start",
+            html: text::web(""),
+            css: "",
+            js: ""
+        }
+        ''',
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="View::web oder Page::web annotiert"):
+        build_web(config_path)
+
+
+def test_page_type_requires_all_fields(tmp_path):
+    config_path = web_project(tmp_path)
+    page_path = tmp_path / "page.sic"
+    page_path.write_text(
+        '''
+        goal page: Page::web = {
+            output: "index.html",
+            title: "Start",
+            html: text::web(""),
+            css: ""
+        }
+        ''',
+        encoding="utf-8",
+    )
+    with pytest.raises(LangTypeError, match="Record fehlt Feld 'js'"):
+        build_web(config_path)
 
 
 def test_fastapi_forwards_json_to_hot_sic_goal(tmp_path):

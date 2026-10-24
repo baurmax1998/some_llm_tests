@@ -13,7 +13,7 @@ let area = width * height
 - `let` definiert nur einen zuvor verwendeten Namen.
 - Werte sind unveränderlich; Abhängigkeiten bestimmen die Ausführung.
 - Freie Namen sind Eingaben. Typen entstehen aus Verwendung und Annotationen.
-- Typen: `Bool`, `Int`, `Float`, `String`, `T?`, `List<T>`, `Map<K,V>` und schrittweise inferierte Records.
+- Typen: `Bool`, `Int`, `Float`, `String`, `T?`, `List<T>`, `Map<K,V>`, qualifizierte Standardbibliothekstypen wie `Page::web` und schrittweise inferierte Records.
 - Keine impliziten Typumwandlungen.
 
 Lokale Bindung:

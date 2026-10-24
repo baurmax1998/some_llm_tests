@@ -1,9 +1,0 @@
-goal response: List<Todo> =
-    if saved then updated else err persistenceError = "Todo konnte nicht gespeichert werden"
-let saved = write_json::files::std(updated, "todos.json")
-let updated = todos.map(todo =>
-    if todo.id == (id: Int)
-    then {id: todo.id, title: todo.title: String, completed: not todo.completed}
-    else todo
-)
-let todos = read_json::files::std("todos.json"): List<Todo>

@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any, Callable
 from .calculation import CalculationSpec, ErrorSpec
 from .errors import LangNameError
-from .types import FunctionType, clone_type
+from .types import FunctionType, Type, clone_type
 
 
 @dataclass(frozen=True)
@@ -13,6 +13,7 @@ class ExternalFunction:
     origin: tuple[str, ...]
     type: FunctionType
     implementation: Callable[..., Any]
+    parameter_names: tuple[str, ...] = ()
 
     @property
     def path(self) -> tuple[str, ...]:
@@ -23,12 +24,31 @@ class ModuleRegistry:
     def __init__(self) -> None:
         self._functions: dict[tuple[str, ...], ExternalFunction] = {}
         self._calculations: dict[tuple[str, ...], CalculationSpec] = {}
+        self._types: dict[tuple[str, ...], Type] = {}
+
+    def register_type(self, symbol: str, origin: tuple[str, ...], type_: Type) -> None:
+        """Registriert einen qualifizierten Typ, etwa ``Page::web``."""
+        path = (symbol, *origin)
+        if path in self._types:
+            raise ValueError(f"Typ {'::'.join(path)} ist bereits registriert")
+        self._types[path] = type_
+
+    def resolve_type(self, symbol: str, origin: tuple[str, ...]) -> Type:
+        path = (symbol, *origin)
+        try:
+            return clone_type(self._types[path])
+        except KeyError as exc:
+            raise LangNameError(f"Unbekannter externer Typ {'::'.join(path)}") from exc
 
     def register(
         self, symbol: str, origin: tuple[str, ...], type_: FunctionType,
-        implementation: Callable[..., Any],
+        implementation: Callable[..., Any], parameter_names: tuple[str, ...] = (),
     ) -> None:
-        external = ExternalFunction(symbol, tuple(origin), type_, implementation)
+        if parameter_names and len(parameter_names) != len(type_.parameters):
+            raise ValueError("Parameternamen und Funktionstyp haben unterschiedliche Länge")
+        external = ExternalFunction(
+            symbol, tuple(origin), type_, implementation, tuple(parameter_names)
+        )
         if external.path in self._functions or external.path in self._calculations:
             raise ValueError(f"Externe Funktion {'::'.join(external.path)} ist bereits registriert")
         self._functions[external.path] = external
@@ -46,6 +66,7 @@ class ModuleRegistry:
             external.origin,
             clone_type(external.type),
             external.implementation,
+            external.parameter_names,
         )
 
     def register_source(self, module: str, package: str, source: str) -> None:
@@ -76,6 +97,17 @@ class ModuleRegistry:
             if path in self._functions or path in self._calculations:
                 raise ValueError(f"Export {'::'.join(path)} ist bereits registriert")
             self._calculations[path] = spec
+            # Wenn Modul und Goal gleich heißen, ist `layout::frontend`
+            # eindeutig; `layout::layout::frontend` bleibt als voller Pfad
+            # verfügbar, muss innerhalb eines Pakets aber nicht geschrieben werden.
+            if binding.is_goal and binding.name == module:
+                short_path = (binding.name, package)
+                if (
+                    short_path in self._functions
+                    or short_path in self._calculations
+                ):
+                    raise ValueError(f"Export {'::'.join(short_path)} ist bereits registriert")
+                self._calculations[short_path] = spec
 
     # Verständlicher Alias für Projektintegrationen.
     register_module = register_source
@@ -106,7 +138,7 @@ class ModuleRegistry:
         return (symbol, *origin) in self._calculations
 
     def paths(self) -> tuple[tuple[str, ...], ...]:
-        return tuple(sorted((*self._functions, *self._calculations)))
+        return tuple(sorted((*self._functions, *self._calculations, *self._types)))
 
 
 def _all_expression_names(expression):

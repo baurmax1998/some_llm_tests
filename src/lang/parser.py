@@ -114,13 +114,16 @@ class Parser:
 
     def parse_type(self) -> TypeRef:
         name = self.expect("NAME").value
+        origin: list[str] = []
+        while self.match("ORIGIN"):
+            origin.append(self.expect("NAME").value)
         arguments: list[TypeRef] = []
         if self.match("OP", "<"):
             arguments.append(self.parse_type())
             while self.match(","):
                 arguments.append(self.parse_type())
             self.expect("OP", ">")
-        expected_arguments = {"List": 1, "Map": 2}.get(name, 0)
+        expected_arguments = {"List": 1, "Map": 2}.get(name, 0) if not origin else 0
         if len(arguments) != expected_arguments:
             if self.allow_incomplete and not arguments and expected_arguments and self.current.kind == "EOF":
                 raise LangIncompleteError("Typparameter")
@@ -128,7 +131,7 @@ class Parser:
                 f"{name} benötigt {expected_arguments} Typparameter, erhalten: {len(arguments)}"
             )
         nullable = self.match("?")
-        return TypeRef(name, tuple(arguments), nullable)
+        return TypeRef(name, tuple(arguments), nullable, tuple(origin))
 
     def parse_expression(self, minimum: int = 0) -> Expr:
         start = self.current.offset

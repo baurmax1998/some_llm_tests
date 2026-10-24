@@ -1,0 +1,9 @@
+goal todo: Todo =
+   {
+    id: String: id,
+    title: String: title,
+    done: Bool: done
+   }
+let id = 0
+let title = ""
+let done = false

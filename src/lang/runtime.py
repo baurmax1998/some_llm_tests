@@ -33,6 +33,7 @@ class Evaluator:
         self.overrides = dict(overrides or {})
         self.identity_origin = identity_origin
         self.captured_values: dict[int, dict[str, Any]] = {}
+        self.capture_actions = False
 
     def run(self) -> ExecutionResult:
         goal = self.checked.program.goal.name
@@ -168,8 +169,37 @@ class Evaluator:
                 if len(arguments) != len(expression.parameters):
                     raise LangRuntimeError("Falsche Parameteranzahl")
                 return self.evaluate(expression.body, {**captured, **dict(zip(expression.parameters, arguments))})
+            def action_descriptor(*arguments: Any) -> Any:
+                # Statische Abhängigkeiten (etwa `nextId`) werden vor dem
+                # Capture berechnet; nur der eigentliche Backend-Aufruf der
+                # Lambda wird anschließend als Browseraktion beschrieben.
+                from .dependencies import expression_names
+                for dependency in expression_names(
+                    expression.body, frozenset(expression.parameters)
+                ):
+                    if dependency in self.definitions:
+                        self.resolve(dependency)
+                previous = self.capture_actions
+                self.capture_actions = True
+                try:
+                    return function(*arguments)
+                finally:
+                    self.capture_actions = previous
+            function.action_descriptor = action_descriptor  # type: ignore[attr-defined]
             return function
         if isinstance(expression, ast.Call):
+            external = self.checked.external_calls.get(id(expression))
+            if external is not None:
+                arguments: dict[str, Any] = {}
+                positional_index = 0
+                for argument in expression.arguments:
+                    if isinstance(argument, ast.NamedArgument):
+                        name, value = argument.name, argument.value
+                    else:
+                        name, value = external.parameter_names[positional_index], argument
+                        positional_index += 1
+                    arguments[name] = self.evaluate(value, local)
+                return external.implementation(**arguments)
             spec = self.checked.call_specs.get(id(expression))
             if spec is not None:
                 arguments = {
@@ -177,6 +207,11 @@ class Evaluator:
                     for argument in expression.arguments
                     if isinstance(argument, ast.NamedArgument)
                 }
+                if self.capture_actions and spec.origin[-1:] == ("backend",):
+                    return {
+                        "__sic_action__": spec.symbol,
+                        "arguments": arguments,
+                    }
                 return self.invoke_calculation(spec, arguments).resolve(spec.symbol)
             function = self.evaluate(expression.function, local)
             return function(*(self.evaluate(argument, local) for argument in expression.arguments))
@@ -275,7 +310,7 @@ def validate_runtime_value(value: Any, expected: Type, context: str = "value") -
             valid = type(value) is float
         elif expected.name == "Null":
             valid = value is None
-        elif expected.name == "String":
+        elif expected.name in {"String", "Html::web", "View::web"}:
             valid = isinstance(value, str)
     elif isinstance(expected, NullableType):
         if value is None:

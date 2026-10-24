@@ -18,6 +18,13 @@ from .lang.types import ListType, MapType, NullableType, Primitive, RecordType, 
 
 
 @dataclass(frozen=True)
+class ModuleConfig:
+    module: str
+    package: str
+    source: Path
+
+
+@dataclass(frozen=True)
 class EndpointConfig:
     name: str
     method: str
@@ -31,6 +38,7 @@ class WebConfig:
     host: str
     port: int
     output: Path
+    modules: tuple[ModuleConfig, ...]
     pages: tuple[Path, ...]
     endpoints: tuple[EndpointConfig, ...]
     root: Path
@@ -52,30 +60,57 @@ def _string(record: dict[str, Any], name: str, context: str) -> str:
     return value
 
 
-def load_web_config(path: str | Path = "web.sic") -> WebConfig:
+def load_web_config(path: str | Path = "app.sic") -> WebConfig:
     """Wertet die SIC-Konfiguration aus und validiert ihre Web-Metadaten."""
     config_path = Path(path).resolve()
     root = config_path.parent
     source = config_path.read_text(encoding="utf-8")
     registry = standard_registry(root)
-    value = Evaluator(compile_program(source, registry), registry).run().value
+    checked = compile_program(source, registry)
+    app_type = prune(checked.bindings[checked.program.goal.name])
+    if not isinstance(app_type, RecordType) or app_type.name != "App::web":
+        raise ValueError("Das Goal in app.sic muss als App::web annotiert sein")
+    value = Evaluator(checked, registry).run().value
     if not isinstance(value, dict):
-        raise ValueError("Das Goal der Web-Konfiguration muss einen Record liefern")
+        raise ValueError("Das App-Goal muss einen Record liefern")
 
-    title = _string(value, "title", "app")
-    host = _string(value, "host", "app")
+    title = value.get("title", "SIC App")
+    host = value.get("host", "127.0.0.1")
+    if not isinstance(title, str) or not title:
+        raise ValueError("app.title muss ein nicht leerer String sein")
+    if not isinstance(host, str) or not host:
+        raise ValueError("app.host muss ein nicht leerer String sein")
     port = value.get("port")
     if type(port) is not int or not 1 <= port <= 65535:
         raise ValueError("app.port muss ein Int zwischen 1 und 65535 sein")
-    output_raw = _string(value, "output", "app")
+    output_raw = value.get("output", ".out")
+    if not isinstance(output_raw, str) or not output_raw:
+        raise ValueError("app.output muss ein nicht leerer String sein")
     output = _inside(root, output_raw, "app.output")
 
-    raw_pages = value.get("pages")
-    raw_endpoints = value.get("endpoints")
+    raw_modules = value.get("modules", [])
+    raw_pages = value.get("pages", [])
+    raw_endpoints = value.get("endpoints", [])
+    if not isinstance(raw_modules, list) or not all(isinstance(item, dict) for item in raw_modules):
+        raise ValueError("app.modules muss eine Liste von Records sein")
     if not isinstance(raw_pages, list) or not all(isinstance(item, str) for item in raw_pages):
         raise ValueError("app.pages muss List<String> sein")
     if not isinstance(raw_endpoints, list) or not all(isinstance(item, dict) for item in raw_endpoints):
         raise ValueError("app.endpoints muss eine Liste von Records sein")
+
+    modules: list[ModuleConfig] = []
+    module_paths: set[tuple[str, str]] = set()
+    for index, item in enumerate(raw_modules):
+        context = f"app.modules[{index}]"
+        module = _string(item, "module", context)
+        package = _string(item, "package", context)
+        if (module, package) in module_paths:
+            raise ValueError(f"Modul {module}::{package} ist doppelt")
+        module_paths.add((module, package))
+        modules.append(ModuleConfig(
+            module, package,
+            _inside(root, _string(item, "source", context), "module.source"),
+        ))
 
     pages = tuple(_inside(root, item, "page") for item in raw_pages)
     endpoints: list[EndpointConfig] = []
@@ -98,7 +133,33 @@ def load_web_config(path: str | Path = "web.sic") -> WebConfig:
         names.add(name)
         routes.add((method, route))
         endpoints.append(EndpointConfig(name, method, route, source_path))
-    return WebConfig(title, host, port, output, pages, tuple(endpoints), root)
+    return WebConfig(
+        title, host, port, output, tuple(modules), pages, tuple(endpoints), root
+    )
+
+
+def _project_registry(
+    root: Path, modules: tuple[ModuleConfig, ...],
+    endpoints: tuple[EndpointConfig, ...] = (),
+):
+    registry = standard_registry(root)
+    for module in modules:
+        registry.register_source(
+            module.module, module.package,
+            module.source.read_text(encoding="utf-8"),
+        )
+    # Endpunkte sind automatisch als `name::backend` verfügbar. Eine separate
+    # Modulliste nur für Frontend-Aufrufe wäre redundante Konfiguration.
+    registered = {(module.module, module.package) for module in modules}
+    for endpoint in endpoints:
+        key = (endpoint.name, "backend")
+        if key in registered:
+            continue
+        registry.register_source(
+            endpoint.name, "backend",
+            endpoint.source.read_text(encoding="utf-8"),
+        )
+    return registry
 
 
 def _coerce_http_value(value: Any, expected: Type | None) -> Any:
@@ -139,26 +200,31 @@ def _coerce_http_value(value: Any, expected: Type | None) -> Any:
 class HotSicProgram:
     """Hält die letzte kompilierte Fassung und lädt Änderungen automatisch."""
 
-    def __init__(self, source: Path, root: Path, execution_lock: threading.RLock):
+    def __init__(
+        self, source: Path, root: Path, modules: tuple[ModuleConfig, ...],
+        execution_lock: threading.RLock,
+    ):
         self.source = source
         self.root = root
+        self.modules = modules
         self.execution_lock = execution_lock
         self._load_lock = threading.RLock()
-        self._stamp: int | None = None
+        self._stamp: tuple[int, ...] | None = None
         self._checked = None
         self._registry = None
         self._load()
 
     def _load(self) -> None:
-        stamp = self.source.stat().st_mtime_ns
+        sources = (self.source, *(module.source for module in self.modules))
+        stamp = tuple(source.stat().st_mtime_ns for source in sources)
         if stamp == self._stamp and self._checked is not None:
             return
         with self._load_lock:
-            stamp = self.source.stat().st_mtime_ns
+            stamp = tuple(source.stat().st_mtime_ns for source in sources)
             if stamp == self._stamp and self._checked is not None:
                 return
             source = self.source.read_text(encoding="utf-8")
-            registry = standard_registry(self.root)
+            registry = _project_registry(self.root, self.modules)
             checked = compile_program(source, registry)
             self._registry = registry
             self._checked = checked
@@ -230,6 +296,7 @@ document.addEventListener("submit", async event => {{
     const result = await call(name, values);
     show(name, result);
     document.dispatchEvent(new CustomEvent("sic:result", {{detail: {{name, result}}}}));
+    window.location.reload();
   }} catch (error) {{
     show(name, error.response || error.message);
     document.dispatchEvent(new CustomEvent("sic:error", {{detail: {{name, error}}}}));
@@ -239,32 +306,44 @@ document.addEventListener("click", async event => {{
   const button = event.target.closest("[data-sic-call]");
   if (!button) return;
   const name = button.dataset.sicCall;
-  const result = await call(name);
+  const values = button.dataset.sicArgs ? JSON.parse(button.dataset.sicArgs) : {{}};
+  const result = await call(name, values);
   show(name, result);
   document.dispatchEvent(new CustomEvent("sic:result", {{detail: {{name, result}}}}));
+  window.location.reload();
 }});
 window.sic = {{call, endpoints: definitions}};
 """.strip()
 
 
-def build_web(config_path: str | Path = "web.sic") -> list[Path]:
+def build_web(config_path: str | Path = "app.sic") -> list[Path]:
     """Kompiliert SIC-Seitengoals zu eigenständigen HTML-Dateien."""
     config = load_web_config(config_path)
     config.output.mkdir(parents=True, exist_ok=True)
     generated: list[Path] = []
     runtime = _browser_runtime(config.endpoints)
     for source_path in config.pages:
-        registry = standard_registry(config.root)
-        page = Evaluator(
-            compile_program(source_path.read_text(encoding="utf-8"), registry), registry
-        ).run().value
-        if not isinstance(page, dict):
+        registry = _project_registry(config.root, config.modules, config.endpoints)
+        checked = compile_program(source_path.read_text(encoding="utf-8"), registry)
+        page_type = prune(checked.bindings[checked.program.goal.name])
+        is_view = isinstance(page_type, Primitive) and page_type.name == "View::web"
+        is_page = isinstance(page_type, RecordType) and page_type.name == "Page::web"
+        if not is_view and not is_page:
+            raise ValueError(
+                f"{source_path}: Das Goal muss als View::web oder Page::web annotiert sein"
+            )
+        value = Evaluator(checked, registry).run().value
+        if is_view:
+            page = {"html": value}
+        elif isinstance(value, dict):
+            page = value
+        else:
             raise ValueError(f"{source_path}: Das Page-Goal muss einen Record liefern")
-        output_name = _string(page, "output", str(source_path))
-        title = page.get("title", config.title)
+        output_name = "index.html" if is_view else _string(page, "output", str(source_path))
+        title = config.title if is_view else page.get("title", config.title)
         body = page.get("html", "")
-        css = page.get("css", "")
-        script = page.get("js", "")
+        css = "" if is_view else page.get("css", "")
+        script = "" if is_view else page.get("js", "")
         if not all(isinstance(value, str) for value in (title, body, css, script)):
             raise ValueError(f"{source_path}: title, html, css und js müssen Strings sein")
         destination = _inside(config.output, output_name, "page.output")
@@ -283,7 +362,7 @@ def build_web(config_path: str | Path = "web.sic") -> list[Path]:
     return generated
 
 
-def create_app(config_path: str | Path = "web.sic"):
+def create_app(config_path: str | Path = "app.sic"):
     """Erzeugt eine FastAPI-App; SIC-Endpunkte werden bei Änderungen neu geladen."""
     try:
         from fastapi import FastAPI, Request
@@ -337,6 +416,10 @@ def create_app(config_path: str | Path = "web.sic"):
                 arguments.update(body)
             try:
                 value = await run_in_threadpool(program.execute, arguments)
+                # Deklarative Apps lesen ihre Daten als normale Backend-
+                # Abhängigkeiten. Nach einer Aktion wird die statische Seite
+                # neu ausgewertet, bevor der Browser sie erneut lädt.
+                await run_in_threadpool(build_web, config_path)
                 return response_for(value)
             except LangCalculationError as exc:
                 detail = exc.payload if exc.payload is not None else exc.name
@@ -351,7 +434,9 @@ def create_app(config_path: str | Path = "web.sic"):
         return handler
 
     for endpoint in config.endpoints:
-        program = HotSicProgram(endpoint.source, config.root, execution_lock)
+        program = HotSicProgram(
+            endpoint.source, config.root, config.modules, execution_lock
+        )
         app.add_api_route(
             endpoint.path, make_handler(program), methods=[endpoint.method], name=endpoint.name
         )
@@ -367,7 +452,7 @@ def create_app(config_path: str | Path = "web.sic"):
     return app
 
 
-def serve_web(config_path: str | Path = "web.sic", *, reload: bool = False) -> None:
+def serve_web(config_path: str | Path = "app.sic", *, reload: bool = False) -> None:
     """Startet den Webserver. SIC-Endpunkte benötigen keinen Prozess-Restart."""
     import uvicorn
 

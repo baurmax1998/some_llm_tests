@@ -5,7 +5,7 @@ from . import ast
 from .calculation import CalculationSpec, ErrorSpec
 from .dependencies import check_definition_order, check_dependency_cycles
 from .errors import LangNameError, LangTypeError
-from .registry import ModuleRegistry
+from .registry import ExternalFunction, ModuleRegistry
 from .types import (
     BOOL, FLOAT, INT, NULL, STRING, FunctionType, ListType, MapType,
     NullableType, Primitive, RecordType, Type, TypeVariable, format_type, prune,
@@ -27,6 +27,7 @@ class CheckedProgram:
     inputs: dict[str, Type]
     direct_errors: dict[str, tuple[ErrorSpec, ...]]
     call_specs: dict[int, CalculationSpec]
+    external_calls: dict[int, ExternalFunction]
     captures: dict[int, CaptureInfo]
 
     def type_of(self, name: str) -> str:
@@ -43,6 +44,7 @@ class TypeChecker:
         self.direct_errors: dict[str, tuple[ErrorSpec, ...]] = {}
         self.error_payloads: dict[str, Type | None] = {}
         self.call_specs: dict[int, CalculationSpec] = {}
+        self.external_calls: dict[int, ExternalFunction] = {}
         self.captures: dict[int, CaptureInfo] = {}
         self.capture_types: dict[int, dict[str, Type]] = {}
         self.program: ast.Program | None = None
@@ -53,7 +55,9 @@ class TypeChecker:
         return result
 
     def from_ref(self, reference: ast.TypeRef) -> Type:
-        if reference.name == "Bool": result: Type = BOOL
+        if reference.origin:
+            result = self.registry.resolve_type(reference.name, reference.origin)
+        elif reference.name == "Bool": result: Type = BOOL
         elif reference.name == "Int": result = INT
         elif reference.name == "Float": result = FLOAT
         elif reference.name == "String": result = STRING
@@ -111,7 +115,8 @@ class TypeChecker:
             self.require_resolved(type_, name, set())
         return CheckedProgram(
             program, dict(self.bindings), dict(self.records), dict(self.inputs),
-            dict(self.direct_errors), dict(self.call_specs), dict(self.captures),
+            dict(self.direct_errors), dict(self.call_specs), dict(self.external_calls),
+            dict(self.captures),
         )
 
     def prepare_errors(self, program: ast.Program) -> None:
@@ -469,7 +474,44 @@ class TypeChecker:
             result = FunctionType(parameters, body_type)
         elif isinstance(expression, ast.Call):
             calculation = self.calculation_spec(expression)
-            if calculation is not None or any(isinstance(arg, ast.NamedArgument) for arg in expression.arguments):
+            named = any(isinstance(arg, ast.NamedArgument) for arg in expression.arguments)
+            external = None
+            if (
+                named and isinstance(expression.function, ast.Name)
+                and expression.function.origin and calculation is None
+            ):
+                external = self.registry.resolve(
+                    expression.function.name, expression.function.origin
+                )
+            if external is not None:
+                if not external.parameter_names:
+                    raise LangTypeError("Externe Funktion besitzt keine benannten Parameter")
+                assigned: dict[str, ast.Expr] = {}
+                positional_index = 0
+                for argument in expression.arguments:
+                    if isinstance(argument, ast.NamedArgument):
+                        name, value = argument.name, argument.value
+                    else:
+                        if positional_index >= len(external.parameter_names):
+                            raise LangTypeError("Zu viele positionale Argumente")
+                        name, value = external.parameter_names[positional_index], argument
+                        positional_index += 1
+                    if name in assigned:
+                        raise LangTypeError(f"Aufruf enthält Argument {name!r} mehrfach")
+                    assigned[name] = value
+                expected_names = set(external.parameter_names)
+                if set(assigned) != expected_names:
+                    missing = expected_names - set(assigned)
+                    unknown = set(assigned) - expected_names
+                    detail = sorted(missing or unknown)[0]
+                    raise LangNameError(f"Ungültiges Argument {detail!r} für {external.symbol!r}")
+                for name, parameter_type in zip(
+                    external.parameter_names, external.type.parameters
+                ):
+                    self.infer(assigned[name], scope, parameter_type)
+                result = external.type.result
+                self.external_calls[id(expression)] = external
+            elif calculation is not None or named:
                 result, _ = self.infer_calculation_call(expression, scope, expected)
             else:
                 arguments = [self.infer(argument, scope) for argument in expression.arguments]

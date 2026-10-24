@@ -1,0 +1,40 @@
+goal view: View::web =
+    Column::web([
+            Input::web(
+                placeholder: "Neue Aufgabe",
+                on_submit: title =>
+                    createTodo::backend(
+                        id: nextId,
+                        title: title
+                    )
+            ),
+
+            ListView::web(
+                todos.map(todo =>
+                    Row::web([
+                        Checkbox::web(
+                            todo.done,
+                            on_change: _ =>
+                                toggleTodo::backend(id: todo.id)
+                        ),
+
+                        Text::web(todo.title),
+
+                        Button::web(
+                            "Löschen",
+                            on_click: _ =>
+                                deleteTodo::backend(id: todo.id)
+                        )
+                    ])
+                )
+            )
+        ])
+
+let todos = listTodos::backend()
+
+let nextId =
+    (todos
+        .map(todo => todo.id)
+        .sort()
+        .last() ?? 0
+    ) + 1
