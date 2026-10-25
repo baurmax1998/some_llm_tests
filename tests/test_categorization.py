@@ -1,7 +1,10 @@
 """Vergleich von drei Decodern für die thematische LLM-Kategorisierung."""
+import heapq
 import json
 import time
 from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Callable
 
 import pytest
@@ -771,3 +774,292 @@ def test_7_add_one_layer_to_7_17_34_ablation_eval(backend):
 
     # Qualitätsverluste sind Messergebnisse und sollen den Test nicht abbrechen.
     assert len(results) == layer_count - len(base_skip_layers)
+
+
+@pytest.mark.integration
+def test_8_reverse_add_one_layer_to_7_17_26_27_28_29_34_eval(backend):
+    """Erweitert die Skip-Basis rückwärts um jeweils genau einen weiteren Layer."""
+    base_skip_layers = {7, 17, 34, 26, 27, 28, 29}
+    base_label = "7,17,34,26,27,28,29"
+    layer_count = len(backend.model.model.layers)
+    candidate_layers = [
+        index
+        for index in reversed(range(layer_count))
+        if index not in base_skip_layers
+    ]
+
+    def evaluate(
+        skip_layers: set[int], label: str
+    ) -> tuple[list[Category], float]:
+        answers: list[Category] = []
+        started = time.perf_counter()
+        for case_number, case in enumerate(CASES, start=1):
+            answer = run_reduced_lm_head_with_skips(
+                backend, case.context, skip_layers
+            )
+            actual = answer.categorization.category
+            answers.append(actual)
+            marker = "✓" if actual is case.expected else "✗"
+            print(
+                f"  {label:<32} | {case_number:>2}/{len(CASES)} | {marker} "
+                f"{case.name:<22} | Antwort={actual.value}",
+                flush=True,
+            )
+        return answers, time.perf_counter() - started
+
+    print(f"\n{'=' * 112}")
+    print(f"RÜCKWÄRTS-ABLATION AUF BASIS VON SKIP {{{base_label}}}")
+    print(
+        "Es wird in absteigender Reihenfolge jeweils genau ein weiterer Layer "
+        "entfernt; die Kombinationen sind nicht kumulativ."
+    )
+    print(f"Reihenfolge: {candidate_layers}")
+    print(f"{'=' * 112}", flush=True)
+
+    base_answers, base_duration = evaluate(
+        base_skip_layers, f"Skip {{{base_label}}}"
+    )
+    base_correct = sum(
+        actual is case.expected for case, actual in zip(CASES, base_answers)
+    )
+    base_accuracy = base_correct / len(CASES)
+    print(
+        f"Basis {{{base_label}}}: {base_correct}/{len(CASES)} korrekt "
+        f"({base_accuracy:.1%}), Zeit={base_duration:.3f}s\n",
+        flush=True,
+    )
+
+    results: list[tuple[int, int, float, int, int, float]] = []
+    for added_layer in candidate_layers:
+        skip_layers = {*base_skip_layers, added_layer}
+        combination_label = f"{base_label},{added_layer}"
+        answers, duration = evaluate(
+            skip_layers, f"Skip {{{combination_label}}}"
+        )
+        correct = sum(
+            actual is case.expected for case, actual in zip(CASES, answers)
+        )
+        accuracy = correct / len(CASES)
+        accuracy_cost = base_accuracy - accuracy
+        changed_answers = sum(
+            actual is not base
+            for actual, base in zip(answers, base_answers)
+        )
+        distinct_categories = len(set(answers))
+        results.append(
+            (
+                added_layer,
+                correct,
+                accuracy_cost,
+                changed_answers,
+                distinct_categories,
+                duration,
+            )
+        )
+        print(
+            f"=> + Layer {added_layer:>2}: {correct}/{len(CASES)} korrekt "
+            f"({accuracy:.1%}), Kosten zur Basis={accuracy_cost:+.1%}, "
+            f"geändert={changed_answers}, Kategorien={distinct_categories}, "
+            f"Zeit={duration:.3f}s\n",
+            flush=True,
+        )
+
+    print("\n" + "=" * 112)
+    print("ERGEBNIS DER RÜCKWÄRTS-ABLATION")
+    print("=" * 112)
+    print(
+        f"Basis {{{base_label}}}: {base_correct}/{len(CASES)} korrekt "
+        f"({base_accuracy:.1%}), {base_duration:.3f}s"
+    )
+    print("-" * 112)
+    print(
+        f"{'Zusatz':>6} | {'Korrekt':>7} | {'Genauigkeit':>12} | "
+        f"{'Kosten':>9} | {'Geändert':>8} | {'Klassen':>7} | {'Zeit':>9}"
+    )
+    print("-" * 112)
+    for (
+        added_layer,
+        correct,
+        accuracy_cost,
+        changed_answers,
+        distinct_categories,
+        duration,
+    ) in results:
+        print(
+            f"{added_layer:>6} | {correct:>2}/{len(CASES):<4} | "
+            f"{correct / len(CASES):>11.1%} | {accuracy_cost:>+8.1%} | "
+            f"{changed_answers:>8} | {distinct_categories:>7} | "
+            f"{duration:>8.3f}s"
+        )
+    print("-" * 112)
+    print(
+        "Kosten = Genauigkeit der Skip-Basis minus Genauigkeit mit dem "
+        "zusätzlich entfernten Layer."
+    )
+    print("=" * 112, flush=True)
+
+    # Qualitätsverluste sind Messergebnisse und sollen den Test nicht abbrechen.
+    assert len(results) == layer_count - len(base_skip_layers)
+    assert [result[0] for result in results] == candidate_layers
+
+
+@pytest.mark.integration
+def test_9_prioritized_recursive_layer_search(backend):
+    """Sucht best-first nach möglichst großen Skip-Mengen mit mindestens 80 %."""
+    start_layers = frozenset({7, 17, 26, 27, 28, 29, 34})
+    minimum_correct = 16  # 16/20 = 80 %
+    layer_count = len(backend.model.model.layers)
+    all_layers = tuple(range(layer_count - 1, -1, -1))
+
+    log_directory = Path("categorization_eval_logs")
+    log_directory.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
+    log_path = log_directory / f"recursive_layer_search_{timestamp}.log"
+
+    # Alle getesteten Mengen landen hier. Erfolgreiche Mengen werden zusätzlich
+    # nach Genauigkeit priorisiert und später in der Zusammenfassung gruppiert.
+    evaluated: dict[frozenset[int], tuple[int, float, tuple[Category, ...]]] = {}
+    accepted: dict[frozenset[int], tuple[int, float, tuple[Category, ...]]] = {}
+    queue: list[tuple[int, int, int, frozenset[int]]] = []
+    queue_counter = 0
+    interrupted = False
+    pending_error: BaseException | None = None
+
+    def layer_label(layers: frozenset[int]) -> str:
+        return "{" + ",".join(str(index) for index in sorted(layers)) + "}"
+
+    with log_path.open("w", encoding="utf-8", buffering=1) as log_file:
+        def emit(message: str = "") -> None:
+            print(message, flush=True)
+            log_file.write(message + "\n")
+            log_file.flush()
+
+        def evaluate(layers: frozenset[int]) -> tuple[int, float, tuple[Category, ...]]:
+            label = layer_label(layers)
+            answers: list[Category] = []
+            started = time.perf_counter()
+            emit(f"\nTEST {label} ({len(layers)} Skips)")
+            for case_number, case in enumerate(CASES, start=1):
+                answer = run_reduced_lm_head_with_skips(
+                    backend, case.context, set(layers)
+                )
+                actual = answer.categorization.category
+                answers.append(actual)
+                marker = "OK" if actual is case.expected else "FALSCH"
+                emit(
+                    f"  [{case_number:>2}/{len(CASES)}] {marker:<6} "
+                    f"{case.name:<22} erwartet={case.expected.value:<8} "
+                    f"erhalten={actual.value}"
+                )
+
+            duration = time.perf_counter() - started
+            correct = sum(
+                actual is case.expected for case, actual in zip(CASES, answers)
+            )
+            result = (correct, duration, tuple(answers))
+            evaluated[layers] = result
+            accepted_text = "WEITER" if correct >= minimum_correct else "STOP"
+            emit(
+                f"ERGEBNIS {label}: {correct}/{len(CASES)} "
+                f"({correct / len(CASES):.0%}), {duration:.3f}s, {accepted_text}"
+            )
+            return result
+
+        def enqueue(layers: frozenset[int], correct: int) -> None:
+            nonlocal queue_counter
+            # Höhere Genauigkeit zuerst; bei Gleichstand tiefere Skip-Mengen zuerst.
+            heapq.heappush(
+                queue,
+                (-correct, -len(layers), queue_counter, layers),
+            )
+            queue_counter += 1
+
+        def write_summary() -> None:
+            emit("\n" + "=" * 110)
+            emit("ZUSAMMENFASSUNG DER PRIORISIERTEN LAYER-SUCHE")
+            emit("=" * 110)
+            emit(f"Logdatei: {log_path.resolve()}")
+            emit(f"Getestete Kombinationen: {len(evaluated)}")
+            emit(f"Kombinationen ab 80 %:   {len(accepted)}")
+            emit(f"Noch in der Warteschlange:{len(queue):>5}")
+            emit(f"Manuell abgebrochen:      {'ja' if interrupted else 'nein'}")
+
+            for correct in range(len(CASES), minimum_correct - 1, -1):
+                matching = [
+                    (layers, result)
+                    for layers, result in accepted.items()
+                    if result[0] == correct
+                ]
+                matching.sort(key=lambda item: (-len(item[0]), tuple(sorted(item[0]))))
+                emit("\n" + "-" * 110)
+                emit(
+                    f"{correct / len(CASES):.0%} GENAUIGKEIT "
+                    f"({len(matching)} Kombinationen)"
+                )
+                emit("-" * 110)
+                for layers, (_, duration, _) in matching:
+                    emit(
+                        f"Skips={len(layers):>2} | {layer_label(layers):<82} "
+                        f"| {duration:>8.3f}s"
+                    )
+            emit("=" * 110)
+
+        emit("PRIORISIERTE REKURSIVE LAYER-SUCHE")
+        emit(f"Startmenge: {layer_label(start_layers)}")
+        emit(f"Layeranzahl: {layer_count}")
+        emit(f"Schwellwert: {minimum_correct}/{len(CASES)} (80 %)")
+        emit(
+            "Priorität: Genauigkeit absteigend, danach Anzahl der Skips absteigend."
+        )
+        emit("Mit Ctrl-C kann die Suche beendet und die Zusammenfassung geschrieben werden.")
+        emit(f"Logdatei: {log_path.resolve()}")
+
+        try:
+            start_result = evaluate(start_layers)
+            if start_result[0] >= minimum_correct:
+                accepted[start_layers] = start_result
+                enqueue(start_layers, start_result[0])
+            else:
+                emit("Die Startmenge liegt unter 80 %; es gibt nichts zu erweitern.")
+
+            while queue:
+                neg_correct, neg_depth, _, current_layers = heapq.heappop(queue)
+                emit(
+                    f"\nEXPANDIERE {layer_label(current_layers)} | "
+                    f"Genauigkeit={-neg_correct}/{len(CASES)} | "
+                    f"Skips={-neg_depth} | Queue={len(queue)}"
+                )
+
+                # Die Layer werden rückwärts geprüft. Neue Treffer landen sofort
+                # in der globalen Priority Queue und gelten über alle Tiefen hinweg.
+                for layer_index in all_layers:
+                    if layer_index in current_layers:
+                        continue
+                    candidate = current_layers | {layer_index}
+                    if candidate in evaluated:
+                        continue
+
+                    result = evaluate(candidate)
+                    if result[0] >= minimum_correct:
+                        accepted[candidate] = result
+                        enqueue(candidate, result[0])
+                        emit(
+                            f"QUEUE + {layer_label(candidate)} | "
+                            f"Priorität={result[0]}/{len(CASES)} | "
+                            f"Skips={len(candidate)}"
+                        )
+        except KeyboardInterrupt:
+            interrupted = True
+            emit("\nABBRUCH empfangen; schreibe den bisherigen Stand.")
+        except BaseException as exc:
+            pending_error = exc
+            emit(f"\nFEHLER: {type(exc).__name__}: {exc}")
+
+        write_summary()
+
+    print(f"\nVollständiges Suchprotokoll: {log_path.resolve()}", flush=True)
+    if pending_error is not None:
+        raise pending_error
+
+    # Ein manueller Abbruch und schwächere Kombinationen sind gültige Eval-Ergebnisse.
+    assert start_layers in evaluated
