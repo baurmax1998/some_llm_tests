@@ -94,6 +94,15 @@ def command_build(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_describe(args: argparse.Namespace) -> int:
+    from .interfaces import describe_codebase
+
+    generated = describe_codebase(args.path, args.output)
+    for path in generated:
+        print(path)
+    return 0
+
+
 def command_serve(args: argparse.Namespace) -> int:
     from .web import serve_web
 
@@ -151,6 +160,14 @@ def build_parser() -> argparse.ArgumentParser:
     web_build_parser = commands.add_parser("build", help="SIC-Webseiten zu HTML/CSS/JS bauen")
     web_build_parser.add_argument("config", nargs="?", default="app.sic")
     web_build_parser.set_defaults(handler=command_build)
+
+    describe_parser = commands.add_parser(
+        "describe", aliases=["interface"],
+        help="Schnittstellen einer SIC-Codebasis nach .out/i schreiben",
+    )
+    describe_parser.add_argument("path", nargs="?", default=".")
+    describe_parser.add_argument("-o", "--output")
+    describe_parser.set_defaults(handler=command_describe)
 
     serve_parser = commands.add_parser("serve", help="SIC-Webprojekt mit FastAPI starten")
     serve_parser.add_argument("config", nargs="?", default="app.sic")

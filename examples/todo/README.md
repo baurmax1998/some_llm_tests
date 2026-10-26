@@ -7,6 +7,19 @@ sic serve examples/todo/app.sic
 
 Danach: <http://127.0.0.1:8000>
 
+Die statisch abgeleiteten Schnittstellen aller SIC-Dateien der Codebasis
+lassen sich separat erzeugen:
+
+```bash
+sic describe examples/todo/app.sic
+```
+
+Dabei entstehen unter `.out/i/` gespiegelte, C-ähnliche `.i`-Dateien,
+zum Beispiel `.out/i/backend/create_todo.i`. Verwendete Imports erhalten
+ebenfalls eine auflösbare Datei, etwa `.out/i/std/files/write_json.i`. Die
+Beschreibungen enthalten für jedes Goal und `let` die freien Eingaben,
+überschreibbaren Zwischenwerte, typisierten Ausgänge sowie mögliche Fehler.
+
 ## Struktur
 
 ```text

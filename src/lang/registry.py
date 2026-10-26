@@ -137,6 +137,12 @@ class ModuleRegistry:
     def has_calculation(self, symbol: str, origin: tuple[str, ...]) -> bool:
         return (symbol, *origin) in self._calculations
 
+    def has_function(self, symbol: str, origin: tuple[str, ...]) -> bool:
+        return (symbol, *origin) in self._functions
+
+    def has_type(self, symbol: str, origin: tuple[str, ...]) -> bool:
+        return (symbol, *origin) in self._types
+
     def paths(self) -> tuple[tuple[str, ...], ...]:
         return tuple(sorted((*self._functions, *self._calculations, *self._types)))
 

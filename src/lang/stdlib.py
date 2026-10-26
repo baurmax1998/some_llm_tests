@@ -148,13 +148,25 @@ def standard_registry(root: str | Path | None = None) -> ModuleRegistry:
 
     json_value = TypeVariable(-1)
     printed_value = TypeVariable(-2)
-    registry.register("read_json", ("files", "std"), FunctionType([STRING], json_value), read_json)
-    registry.register("write_json", ("files", "std"), FunctionType([json_value, STRING], BOOL), write_json)
-    registry.register("read_text", ("files", "std"), FunctionType([STRING], STRING), read_text)
-    registry.register("write_text", ("files", "std"), FunctionType([STRING, STRING], BOOL), write_text)
+    registry.register(
+        "read_json", ("files", "std"), FunctionType([STRING], json_value),
+        read_json, ("path",),
+    )
+    registry.register(
+        "write_json", ("files", "std"), FunctionType([json_value, STRING], BOOL),
+        write_json, ("value", "path"),
+    )
+    registry.register(
+        "read_text", ("files", "std"), FunctionType([STRING], STRING),
+        read_text, ("path",),
+    )
+    registry.register(
+        "write_text", ("files", "std"), FunctionType([STRING, STRING], BOOL),
+        write_text, ("value", "path"),
+    )
     registry.register(
         "print", ("console", "std"),
-        FunctionType([printed_value], printed_value), print_value,
+        FunctionType([printed_value], printed_value), print_value, ("value",),
     )
     html_type = Primitive("Html::web")
     registry.register_type("Html", ("web",), html_type)
@@ -172,9 +184,18 @@ def standard_registry(root: str | Path | None = None) -> ModuleRegistry:
         }, closed=True),
     )
     event_result = TypeVariable(-3)
-    registry.register("Column", ("web",), FunctionType([ListType(view_type)], view_type), column)
-    registry.register("Row", ("web",), FunctionType([ListType(view_type)], view_type), row)
-    registry.register("ListView", ("web",), FunctionType([ListType(view_type)], view_type), list_view)
+    registry.register(
+        "Column", ("web",), FunctionType([ListType(view_type)], view_type),
+        column, ("children",),
+    )
+    registry.register(
+        "Row", ("web",), FunctionType([ListType(view_type)], view_type),
+        row, ("children",),
+    )
+    registry.register(
+        "ListView", ("web",), FunctionType([ListType(view_type)], view_type),
+        list_view, ("children",),
+    )
     registry.register(
         "Input", ("web",),
         FunctionType([STRING, FunctionType([STRING], event_result)], view_type),
@@ -185,7 +206,9 @@ def standard_registry(root: str | Path | None = None) -> ModuleRegistry:
         FunctionType([BOOL, FunctionType([BOOL], event_result)], view_type),
         checkbox, ("checked", "on_change"),
     )
-    registry.register("Text", ("web",), FunctionType([STRING], view_type), text_view)
+    registry.register(
+        "Text", ("web",), FunctionType([STRING], view_type), text_view, ("value",),
+    )
     registry.register(
         "Button", ("web",),
         FunctionType([STRING, FunctionType([BOOL], event_result)], view_type),
@@ -195,12 +218,14 @@ def standard_registry(root: str | Path | None = None) -> ModuleRegistry:
     # Web-Bausteine haben kurze, eindeutige Namen. Die längeren Pfade bleiben
     # vorerst als kompatible Aliase bestehen.
     for origin in (("web",), ("html", "web")):
-        registry.register("text", origin, FunctionType([STRING], html_type), html_text)
+        registry.register(
+            "text", origin, FunctionType([STRING], html_type), html_text, ("value",),
+        )
         registry.register(
             "element", origin,
             FunctionType(
                 [STRING, MapType(STRING, STRING), ListType(html_type)], html_type
             ),
-            html_element,
+            html_element, ("tag", "attributes", "children"),
         )
     return registry
