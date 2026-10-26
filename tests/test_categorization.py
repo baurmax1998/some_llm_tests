@@ -400,6 +400,19 @@ def test_4_reduced_lm_head_with_skipped_layers_eval(backend):
     )
 
 @pytest.mark.integration
+def test_4_reduced_lm_head_with_skipped_layers_14_eval(backend):
+    """Eval einzeln: reduzierter LM-Head mit konfigurierbaren Layer-Skips."""
+    skip_layers = {2,7,17,25,26,27,28,29,30,31,32,33,34,35}
+    ordered_layers = ", ".join(str(index) for index in sorted(skip_layers))
+    run_eval(
+        backend,
+        f"VARIANTE 4: REDUZIERTER LM-HEAD, SKIP LAYERS {{{ordered_layers}}}",
+        lambda current_backend, context: run_reduced_lm_head_with_skips(
+            current_backend, context, skip_layers
+        ),
+    )
+
+@pytest.mark.integration
 def test_4_2_reduced_lm_head_with_skipped_layers_eval(backend):
     """Eval einzeln: reduzierter LM-Head mit konfigurierbaren Layer-Skips."""
     skip_layers = {7, 17, 34} # 7, 17, 26 | 7, 17, 34 sind die wo mit 3 Layern noch 100% haben

@@ -8,7 +8,12 @@ DEFAULT_SYSTEM_PROMPT = "Antworte ausschließlich mit dem verlangten JSON-Dokume
 
 
 class MLXModelBackend:
-    def __init__(self, model_id: str = DEFAULT_MODEL):
+    def __init__(
+        self,
+        model_id: str = DEFAULT_MODEL,
+        *,
+        trust_remote_code: bool = False,
+    ):
         try:
             import mlx.core as mx
             from mlx_lm import load
@@ -16,7 +21,9 @@ class MLXModelBackend:
         except ImportError as exc:
             raise RuntimeError("MLX-Abhängigkeiten fehlen; siehe requirements.txt") from exc
         self.mx = mx
-        self.model, self.tokenizer = load(model_id)
+        self.model, self.tokenizer = load(
+            model_id, trust_remote_code=trust_remote_code
+        )
         self._make_prompt_cache = make_prompt_cache
         self.cache = make_prompt_cache(self.model)
         self._prompt_ids: list[int] | None = None

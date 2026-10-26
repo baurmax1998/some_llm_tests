@@ -6,3 +6,4 @@ __pycache__/
 trace.json
 **/.out/
 categorization_eval_logs/
+models/qwen3-categorization-pruned/
