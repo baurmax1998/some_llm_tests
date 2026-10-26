@@ -19,6 +19,10 @@ zum Beispiel `.out/i/backend/create_todo.i`. Verwendete Imports erhalten
 ebenfalls eine auflösbare Datei, etwa `.out/i/std/files/write_json.i`. Die
 Beschreibungen enthalten für jedes Goal und `let` die freien Eingaben,
 überschreibbaren Zwischenwerte, typisierten Ausgänge sowie mögliche Fehler.
+Zusätzlich entsteht pro SIC-Datei unter `.out/t/` ein vollständiger transitiver
+Abhängigkeitsbaum, etwa `.out/t/frontend/app`. Er verfolgt lokale `let`s,
+Eingaben, Fehler, Projektimporte und deren Standardbibliotheks- und Typimporte;
+gemeinsam verwendete Teilbäume sind mit `shared` markiert.
 
 ## Struktur
 

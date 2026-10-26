@@ -84,6 +84,9 @@ def test_describe_codebase_mirrors_paths_under_out_i(tmp_path: Path):
     assert "interface create" not in result
     assert "record { Int id; String title; } created(\n" in result
     assert "    Int id,\n    String title\n);" in result
+    tree = tmp_path / ".out" / "t" / "backend" / "create"
+    assert tree.is_file()
+    assert "goal created:" in tree.read_text(encoding="utf-8")
 
 
 def test_imported_standard_function_gets_its_own_interface(tmp_path: Path):
@@ -152,3 +155,14 @@ def test_web_project_uses_declared_sources_and_backend_registry(tmp_path: Path):
         tmp_path / ".out" / "i" / "web" / "App.i"
     ).read_text(encoding="utf-8")
     assert "import web.Endpoint;" in app_interface
+
+    frontend_tree = (
+        tmp_path / ".out" / "t" / "frontend" / "app"
+    ).read_text(encoding="utf-8")
+    assert "import backend.greet" in frontend_tree
+    assert "goal greet: String" in frontend_tree
+    assert "input name: String" in frontend_tree
+
+    app_tree = (tmp_path / ".out" / "t" / "app").read_text(encoding="utf-8")
+    assert "import web.App" in app_tree
+    assert "import web.Endpoint" in app_tree
