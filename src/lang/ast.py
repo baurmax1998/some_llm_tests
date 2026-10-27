@@ -196,8 +196,41 @@ class Binding:
 
 
 @dataclass(frozen=True)
+class EffectDeclaration:
+    name: str
+    payload: TypeRef
+    span: SourceSpan | None = None
+
+
+@dataclass(frozen=True)
+class EmitDeclaration:
+    name: str
+    effect: Name
+    payload: Expr
+    span: SourceSpan | None = None
+
+
+@dataclass(frozen=True)
+class ListenerDeclaration:
+    effect: Name
+    filter: Expr | None = None
+    span: SourceSpan | None = None
+
+
+@dataclass(frozen=True)
+class EffectSuppression:
+    effect: Name
+    span: SourceSpan | None = None
+
+
+@dataclass(frozen=True)
 class Program:
     bindings: tuple[Binding, ...]
+    effects: tuple[EffectDeclaration, ...] = ()
+    emits: tuple[EmitDeclaration, ...] = ()
+    listeners: tuple[ListenerDeclaration, ...] = ()
+    voids: tuple[EffectSuppression, ...] = ()
+    ignores: tuple[EffectSuppression, ...] = ()
 
     @property
     def goal(self) -> Binding:

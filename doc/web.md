@@ -89,9 +89,12 @@ goal page: Page::web = {
 }
 ```
 
-Im Browser steht `sic.call(name, daten)` zur Verfügung. Pfadparameter wie
-`{id}` werden aus `daten` eingesetzt. GET-Daten werden Query-Parameter, bei
-anderen Methoden wird JSON gesendet.
+Im Browser steht `sic.call(name, daten)` zur Verfügung. Der Aufruf wird über
+die WebSocket-Verbindung der View übertragen; das gilt auch für `POST`, `PUT`,
+`PATCH` und `DELETE`. Pfadparameter wie `{id}` werden serverseitig aus `daten`
+eingesetzt. Die deklarierte HTTP-Methode und der aufgelöste Pfad stehen dem
+SIC-Goal weiterhin über `request` zur Verfügung. Die konfigurierten HTTP-Routen
+bleiben für externe Clients und direkte API-Aufrufe parallel erreichbar.
 
 Zusätzlich unterstützt der Klebecode:
 
@@ -137,8 +140,10 @@ let nextId = todos.count() + 1
 ```
 
 Event-Lambdas werden beim Build als Browseraktionen erfasst, nicht ausgeführt.
-Nach einem erfolgreichen Backend-Aufruf lädt die Runtime die App neu, wodurch
-`listTodos::backend()` erneut ausgewertet wird.
+Eine aktive View hält eine WebSocket-Verbindung. Darüber laufen sowohl ihre
+Aktionen als auch reaktive Aktualisierungen. Passende Effektmeldungen markieren
+die View als veraltet; die Runtime wertet sie neu aus und ersetzt den
+View-Wurzelknoten, einschließlich aktualisierter Event-Bindungen.
 
 ## Endpunkte
 
@@ -163,4 +168,6 @@ goal response = {status: 201, body: {ok: true}}
 
 `err` wird vorläufig zu HTTP 422. Dateioperationen laufen unter einem
 prozessweiten Lock, damit die JSON-Demo nicht durch parallele Requests
-beschädigt wird. Das ist noch kein Transaktions- oder Effektsystem.
+beschädigt wird. Lesezugriffe abonnieren automatisch den technischen
+`FileChanged::files::std`-Effekt, Schreibzugriffe lösen ihn aus. Diese
+prozesslokale Effektverteilung ist noch kein Transaktionssystem.

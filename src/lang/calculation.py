@@ -1,8 +1,9 @@
 """Schnittstellen aufrufbarer zielorientierter Berechnungen."""
 from __future__ import annotations
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
+from .effects import EffectOutputSpec, EffectSpec
 from .types import Type
 
 
@@ -24,6 +25,11 @@ class CalculationSpec:
     dependencies: dict[str, set[str]]
     direct_errors: dict[str, tuple[ErrorSpec, ...]]
     checked: Any = None
+    effect_outputs: tuple[EffectOutputSpec, ...] = ()
+    listeners: tuple[Any, ...] = ()
+    void_effects: frozenset[tuple[str, ...]] = frozenset()
+    ignore_effects: frozenset[tuple[str, ...]] = frozenset()
+    completion_dependencies: set[str] = field(default_factory=set)
 
     @property
     def result_type(self) -> Type:
@@ -48,6 +54,9 @@ class CalculationSpec:
             visiting.remove(name)
 
         visit(self.symbol)
+        for dependency in self.completion_dependencies:
+            if dependency != self.symbol:
+                visit(dependency)
         return required
 
     def allowed_arguments(self) -> set[str]:
@@ -62,6 +71,11 @@ class CalculationSpec:
                     visit(dependency)
 
         visit(self.symbol)
+        for dependency in self.completion_dependencies:
+            if dependency != self.symbol:
+                reachable.add(dependency)
+                if dependency in self.output_types:
+                    visit(dependency)
         return reachable
 
     def possible_errors(self, overrides: set[str] | frozenset[str] = frozenset()) -> tuple[ErrorSpec, ...]:
@@ -80,3 +94,6 @@ class CalculationSpec:
 
         visit(self.symbol)
         return tuple(found.values())
+
+    def possible_effects(self) -> tuple[EffectOutputSpec, ...]:
+        return self.effect_outputs

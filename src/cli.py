@@ -39,7 +39,11 @@ def command_check(args: argparse.Namespace) -> int:
     except LangError as exc:
         print(exc.diagnostic(source, str(file)), file=sys.stderr)
         return 1
-    print(f"OK: goal {checked.program.goal.name}: {checked.type_of(checked.program.goal.name)}")
+    if checked.program.bindings:
+        print(f"OK: goal {checked.program.goal.name}: {checked.type_of(checked.program.goal.name)}")
+    else:
+        names = ", ".join(effect.name for effect in checked.program.effects)
+        print(f"OK: effects {names}")
     return 0
 
 

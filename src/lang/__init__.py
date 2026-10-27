@@ -6,6 +6,7 @@ from .dependencies import (
     LangDefinitionOrderError, LangDependencyError, check_definition_order,
     check_dependency_cycles, dependency_graph,
 )
+from .effects import EffectMessage, EffectSpec, EffectSubscription
 from .errors import (
     LangCalculationError, LangError, LangIncompleteError, LangNameError, LangRuntimeError,
     LangSyntaxError, LangTypeError,
@@ -40,6 +41,7 @@ def run(
 
 __all__ = [
     "BOOL", "FLOAT", "INT", "NULL", "STRING", "CheckedProgram", "Evaluator", "ExecutionResult",
+    "EffectMessage", "EffectSpec", "EffectSubscription",
     "ExternalFunction", "FunctionType", "LangDefinitionOrderError",
     "LangDependencyError", "LangCalculationError", "LangError",
     "LangIncompleteError", "LangConstraint", "LangNameError", "LangPrefixState",

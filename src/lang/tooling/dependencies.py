@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 from ..checker import CheckedProgram
 from ..registry import ModuleRegistry
-from .analysis import _interface_type, _program_imports
+from .analysis import _interface_type, _program_imports, _type_ref
 from .imports import _type_import_paths
 
 
@@ -98,9 +98,14 @@ def render_dependency_tree(
             children.append(_DependencyNode(label, []))
         return _DependencyNode(label, children)
 
-    root = _DependencyNode(
-        source, [binding_node(checked, checked.program.goal.name)]
-    )
+    if checked.program.bindings:
+        root_children = [binding_node(checked, checked.program.goal.name)]
+    else:
+        root_children = [
+            _DependencyNode(f"effect {effect.name}: {_type_ref(effect.payload)}", [])
+            for effect in checked.program.effects
+        ]
+    root = _DependencyNode(source, root_children)
     lines = [root.label]
 
     def append(node: _DependencyNode, prefix: str, last: bool) -> None:

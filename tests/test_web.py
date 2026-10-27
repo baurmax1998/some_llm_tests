@@ -123,6 +123,86 @@ def test_page_type_requires_all_fields(tmp_path):
         build_web(config_path)
 
 
+def test_websocket_recomputes_live_view_after_file_effect(tmp_path):
+    config_path = tmp_path / "app.sic"
+    config_path.write_text(
+        '''
+        goal app: App::web = {
+            port: 8000,
+            pages: ["page.sic"],
+            endpoints: [
+                {name: "setValue", method: "POST", path: "/value", source: "set.sic"}
+            ]
+        }
+        ''',
+        encoding="utf-8",
+    )
+    (tmp_path / "page.sic").write_text(
+        'goal view: View::web = Text::web(read_text::files::std("value.txt"))',
+        encoding="utf-8",
+    )
+    (tmp_path / "set.sic").write_text(
+        'goal saved: Bool = write_text::files::std(value: String, "value.txt")',
+        encoding="utf-8",
+    )
+    (tmp_path / "value.txt").write_text("vorher", encoding="utf-8")
+
+    app = create_app(config_path)
+    with TestClient(app) as client:
+        with client.websocket_connect("/__sic_ws?page=/") as websocket:
+            assert websocket.receive_json() == {"type": "replace", "html": "vorher"}
+            websocket.send_json({
+                "type": "call", "id": "1", "name": "setValue",
+                "values": {"value": "nachher"},
+            })
+            assert websocket.receive_json() == {
+                "type": "result", "id": "1", "result": True,
+            }
+            assert websocket.receive_json() == {"type": "replace", "html": "nachher"}
+
+
+def test_websocket_transports_post_put_and_delete_actions(tmp_path):
+    config_path = tmp_path / "app.sic"
+    config_path.write_text(
+        '''
+        goal app: App::web = {
+            port: 8000,
+            pages: ["page.sic"],
+            endpoints: [
+                {name: "postValue", method: "POST", path: "/values", source: "method.sic"},
+                {name: "putValue", method: "PUT", path: "/values/{id}", source: "method.sic"},
+                {name: "deleteValue", method: "DELETE", path: "/values/{id}", source: "method.sic"}
+            ]
+        }
+        ''',
+        encoding="utf-8",
+    )
+    (tmp_path / "page.sic").write_text(
+        'goal view: View::web = Text::web("bereit")', encoding="utf-8"
+    )
+    (tmp_path / "method.sic").write_text(
+        'goal response: String = request.method: String', encoding="utf-8"
+    )
+
+    app = create_app(config_path)
+    with TestClient(app) as client:
+        with client.websocket_connect("/__sic_ws?page=/") as websocket:
+            assert websocket.receive_json()["type"] == "replace"
+            calls = [
+                ("postValue", {"value": "a"}, "POST"),
+                ("putValue", {"id": 7, "value": "b"}, "PUT"),
+                ("deleteValue", {"id": 7}, "DELETE"),
+            ]
+            for index, (name, values, method) in enumerate(calls, 1):
+                websocket.send_json({
+                    "type": "call", "id": str(index),
+                    "name": name, "values": values,
+                })
+                assert websocket.receive_json() == {
+                    "type": "result", "id": str(index), "result": method,
+                }
+
+
 def test_fastapi_forwards_json_to_hot_sic_goal(tmp_path):
     config_path = web_project(tmp_path)
     app = create_app(config_path)

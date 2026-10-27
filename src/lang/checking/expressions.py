@@ -198,7 +198,7 @@ class ExpressionInferenceMixin:
             named = any(isinstance(arg, ast.NamedArgument) for arg in expression.arguments)
             external = None
             if (
-                named and isinstance(expression.function, ast.Name)
+                isinstance(expression.function, ast.Name)
                 and expression.function.origin and calculation is None
             ):
                 external = self.registry.resolve(
@@ -206,30 +206,38 @@ class ExpressionInferenceMixin:
                 )
             if external is not None:
                 if not external.parameter_names:
-                    raise LangTypeError("Externe Funktion besitzt keine benannten Parameter")
-                assigned: dict[str, ast.Expr] = {}
-                positional_index = 0
-                for argument in expression.arguments:
-                    if isinstance(argument, ast.NamedArgument):
-                        name, value = argument.name, argument.value
-                    else:
-                        if positional_index >= len(external.parameter_names):
-                            raise LangTypeError("Zu viele positionale Argumente")
-                        name, value = external.parameter_names[positional_index], argument
-                        positional_index += 1
-                    if name in assigned:
-                        raise LangTypeError(f"Aufruf enthält Argument {name!r} mehrfach")
-                    assigned[name] = value
-                expected_names = set(external.parameter_names)
-                if set(assigned) != expected_names:
-                    missing = expected_names - set(assigned)
-                    unknown = set(assigned) - expected_names
-                    detail = sorted(missing or unknown)[0]
-                    raise LangNameError(f"Ungültiges Argument {detail!r} für {external.symbol!r}")
-                for name, parameter_type in zip(
-                    external.parameter_names, external.type.parameters
-                ):
-                    self.infer(assigned[name], scope, parameter_type)
+                    if named:
+                        raise LangTypeError("Externe Funktion besitzt keine benannten Parameter")
+                    if len(expression.arguments) != len(external.type.parameters):
+                        raise LangTypeError("Falsche Argumentanzahl")
+                    for argument, parameter_type in zip(
+                        expression.arguments, external.type.parameters
+                    ):
+                        self.infer(argument, scope, parameter_type)
+                else:
+                    assigned: dict[str, ast.Expr] = {}
+                    positional_index = 0
+                    for argument in expression.arguments:
+                        if isinstance(argument, ast.NamedArgument):
+                            name, value = argument.name, argument.value
+                        else:
+                            if positional_index >= len(external.parameter_names):
+                                raise LangTypeError("Zu viele positionale Argumente")
+                            name, value = external.parameter_names[positional_index], argument
+                            positional_index += 1
+                        if name in assigned:
+                            raise LangTypeError(f"Aufruf enthält Argument {name!r} mehrfach")
+                        assigned[name] = value
+                    expected_names = set(external.parameter_names)
+                    if set(assigned) != expected_names:
+                        missing = expected_names - set(assigned)
+                        unknown = set(assigned) - expected_names
+                        detail = sorted(missing or unknown)[0]
+                        raise LangNameError(f"Ungültiges Argument {detail!r} für {external.symbol!r}")
+                    for name, parameter_type in zip(
+                        external.parameter_names, external.type.parameters
+                    ):
+                        self.infer(assigned[name], scope, parameter_type)
                 result = external.type.result
                 self.external_calls[id(expression)] = external
             elif calculation is not None or named:

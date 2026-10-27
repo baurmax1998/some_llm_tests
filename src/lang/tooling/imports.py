@@ -106,6 +106,31 @@ def _render_external_import(
         lines.append(");")
     else:
         lines.append(f"{result} {external.symbol}{generic}();")
+    if external.effect_outputs:
+        lines.append("    emits {")
+        for output in external.effect_outputs:
+            lines.append(
+                f"        {_import_type(output.effect.payload, variables)} "
+                f"{output.name}: {'::'.join(output.effect.identity)};"
+            )
+        lines.append("    }")
+    if external.automatic_listeners:
+        lines.append("    automatically listens {")
+        for listener in external.automatic_listeners:
+            lines.append(
+                f"        {'::'.join(listener.effect.identity)} "
+                f"by {listener.payload_parameter};"
+            )
+        lines.append("    }")
+    if external.effect_outputs or external.automatic_listeners:
+        lines[-1] += ";"
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _render_effect_import(symbol: str, payload: Type, package: str) -> str:
+    lines = _import_header(package, [])
+    lines.append(f"effect {symbol}: {_import_type(payload, {})};")
     lines.append("")
     return "\n".join(lines)
 

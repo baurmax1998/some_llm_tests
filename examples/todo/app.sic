@@ -1,5 +1,8 @@
 goal app: App::web = {
     port: 8000,
+    modules: [
+        {module: "effects", package: "backend", source: "backend/effects.sic"}
+    ],
     pages: ["frontend/app.sic"],
     endpoints: [
         {name: "listTodos", method: "GET", path: "/api/todos", source: "backend/list_todos.sic"},

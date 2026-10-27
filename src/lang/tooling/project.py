@@ -8,7 +8,8 @@ from ..registry import ModuleRegistry
 from .analysis import describe_program
 from .dependencies import render_dependency_tree
 from .imports import (
-    _render_calculation_import, _render_external_import, _render_type_import,
+    _render_calculation_import, _render_effect_import, _render_external_import,
+    _render_type_import,
     _type_import_paths,
 )
 from .rendering import render_interface
@@ -118,9 +119,13 @@ def describe_codebase(
 
         dependencies: list[tuple[str, ...]] = []
         if registry.has_calculation(symbol, origin):
-            content = _render_calculation_import(
-                registry.resolve_calculation(symbol, origin), path_tuple
-            )
+            calculation = registry.resolve_calculation(symbol, origin)
+            # Goals werden bereits in der Schnittstelle ihrer Quelldatei
+            # beschrieben. Eine weitere, nach dem Goal benannte .i-Datei wäre
+            # insbesondere bei abweichendem Datei- und Goalnamen ein Duplikat.
+            if calculation.checked.program.goal.name == calculation.symbol:
+                continue
+            content = _render_calculation_import(calculation, path_tuple)
         elif registry.has_function(symbol, origin):
             external = registry.resolve(symbol, origin)
             dependencies = [
@@ -128,6 +133,9 @@ def describe_codebase(
                 if path != path_tuple
             ]
             content = _render_external_import(external, package, dependencies)
+        elif registry.has_effect(symbol, origin):
+            effect = registry.resolve_effect(symbol, origin)
+            content = _render_effect_import(symbol, effect.payload, package)
         elif registry.has_type(symbol, origin):
             imported_type = registry.resolve_type(symbol, origin)
             dependencies = [

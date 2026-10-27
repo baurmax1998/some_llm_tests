@@ -31,6 +31,7 @@ app.sic                 # Webprojekt und Routen
 frontend/
   app.sic               # deklarative App::web
 backend/
+  effects.sic
   list_todos.sic
   create_todo.sic
   toggle_todo.sic
@@ -43,8 +44,9 @@ Das typisierte `App::web` in `app.sic` enthält nur `port`, `pages` und
 `endpoints`; Host, Titel, Ausgabeordner und Backend-Registrierung entstehen
 automatisch. `frontend/app.sic` liefert direkt `View::web`. `todos` und `nextId`
 sind normale `let`-Abhängigkeiten. Die Todo-Zeilen entstehen mit `map`; Event-
-Lambdas rufen unmittelbar die Goals aus dem Paket `backend` auf. Nach einer
-Mutation lädt die kleine Browser-Runtime die neu ausgewertete App.
+Lambdas rufen unmittelbar die Goals aus dem Paket `backend` auf. Die Aktionen
+melden `Todos::effects::backend`; `listTodos` hört auf diesen fachlichen Effekt.
+Aktive Views werden daraufhin über WebSocket neu ausgewertet, ohne Seiten-Reload.
 
 Die UI verwendet die Standardbibliothekstypen `App::web` und `View::web` sowie
 `Column::web`, `Input::web`, `ListView::web`, `Row::web`, `Checkbox::web`,

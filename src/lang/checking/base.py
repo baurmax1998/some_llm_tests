@@ -3,10 +3,11 @@ from __future__ import annotations
 from dataclasses import fields, is_dataclass
 from .. import ast
 from ..calculation import CalculationSpec, ErrorSpec
-from ..dependencies import check_definition_order, check_dependency_cycles
+from ..dependencies import check_definition_order, check_dependency_cycles, expression_names
+from ..effects import EffectOutputSpec, EffectSpec
 from ..errors import LangNameError, LangTypeError
 from ..registry import ExternalFunction, ModuleRegistry
-from .models import CaptureInfo, CheckedProgram
+from .models import CaptureInfo, CheckedListener, CheckedProgram
 from ..types import (
     BOOL, FLOAT, INT, NULL, STRING, FunctionType, ListType, MapType,
     NullableType, Primitive, RecordType, Type, TypeVariable, format_type, prune,
@@ -27,6 +28,13 @@ class TypeCheckerBase:
         self.external_calls: dict[int, ExternalFunction] = {}
         self.captures: dict[int, CaptureInfo] = {}
         self.capture_types: dict[int, dict[str, Type]] = {}
+        self.local_effects: dict[str, EffectSpec] = {}
+        self.effect_outputs: list[EffectOutputSpec] = []
+        self.emit_effects: dict[str, EffectSpec] = {}
+        self.listeners: list[CheckedListener] = []
+        self.void_effects: set[tuple[str, ...]] = set()
+        self.ignore_effects: set[tuple[str, ...]] = set()
+        self.completion_dependencies: set[str] = set()
         self.program: ast.Program | None = None
 
     def fresh(self) -> TypeVariable:
@@ -55,6 +63,16 @@ class TypeCheckerBase:
         return NullableType(result) if reference.nullable else result
 
     def check(self, program: ast.Program) -> CheckedProgram:
+        for declaration in program.effects:
+            self.local_effects[declaration.name] = EffectSpec(
+                declaration.name, ("__local_effect__", declaration.name),
+                self.from_ref(declaration.payload),
+            )
+        if not program.bindings:
+            return CheckedProgram(
+                program, {}, dict(self.records), {}, {}, {}, {}, {}, (), {}, (),
+                frozenset(), frozenset(), frozenset(),
+            )
         check_definition_order(program)
         check_dependency_cycles(program)
         self.program = program
@@ -91,13 +109,42 @@ class TypeCheckerBase:
                 if span is not None:
                     exc.attach(span.start, span.end)
                 raise
+        self.prepare_effects(program)
         for name, type_ in {**self.bindings, **self.inputs}.items():
             self.require_resolved(type_, name, set())
         return CheckedProgram(
             program, dict(self.bindings), dict(self.records), dict(self.inputs),
             dict(self.direct_errors), dict(self.call_specs), dict(self.external_calls),
-            dict(self.captures),
+            dict(self.captures), tuple(self.effect_outputs), dict(self.emit_effects),
+            tuple(self.listeners), frozenset(self.void_effects),
+            frozenset(self.ignore_effects), frozenset(self.completion_dependencies),
         )
+
+    def resolve_effect_name(self, name: ast.Name) -> EffectSpec:
+        if name.origin:
+            return self.registry.resolve_effect(name.name, name.origin)
+        try:
+            return self.local_effects[name.name]
+        except KeyError as exc:
+            raise LangNameError(f"Unbekannter Effekt {name.name}") from exc
+
+    def prepare_effects(self, program: ast.Program) -> None:
+        for declaration in program.emits:
+            effect = self.resolve_effect_name(declaration.effect)
+            self.infer(declaration.payload, self.bindings, effect.payload)
+            self.effect_outputs.append(EffectOutputSpec(declaration.name, effect))
+            self.emit_effects[declaration.name] = effect
+            self.completion_dependencies.update(expression_names(declaration.payload))
+        for declaration in program.listeners:
+            effect = self.resolve_effect_name(declaration.effect)
+            if declaration.filter is not None:
+                self.infer(declaration.filter, self.bindings, effect.payload)
+                self.completion_dependencies.update(expression_names(declaration.filter))
+            self.listeners.append(CheckedListener(declaration, effect))
+        for declaration in program.voids:
+            self.void_effects.add(self.resolve_effect_name(declaration.effect).identity)
+        for declaration in program.ignores:
+            self.ignore_effects.add(self.resolve_effect_name(declaration.effect).identity)
 
     def prepare_errors(self, program: ast.Program) -> None:
         """Reserviert Nutzwerttypen und ordnet Fehler ihren Definitionen zu."""
@@ -138,16 +185,20 @@ class TypeCheckerBase:
 
     def local_spec(self, symbol: str) -> CalculationSpec:
         assert self.program is not None
-        from ..dependencies import expression_names
         dependencies = {
             binding.name: expression_names(binding.value)
             for binding in self.program.bindings
         }
         # Noch nicht besuchte freie Namen erhalten beim Prüfen des Arguments
         # ihren Typ und werden in dasselbe Interface aufgenommen.
+        is_goal = symbol == self.program.goal.name
         return CalculationSpec(
             symbol, (), self.bindings, self.inputs, dependencies,
             self.direct_errors, None,
+            tuple(self.effect_outputs) if is_goal else (),
+            tuple(self.listeners) if is_goal else (),
+            frozenset(self.void_effects), frozenset(self.ignore_effects),
+            set(self.completion_dependencies) if is_goal else set(),
         )
 
     def calculation_spec(self, call: ast.Call) -> CalculationSpec | None:
@@ -201,35 +252,81 @@ class TypeCheckerBase:
     def infer_capture(self, access: ast.OutputAccess, scope: dict[str, Type]) -> Type:
         key = id(access.captured)
         if key not in self.capture_types:
-            _, spec = self.infer_calculation_call(access.captured.call, scope)
-            errors = spec.possible_errors({
-                item.name for item in access.captured.call.arguments
-                if isinstance(item, ast.NamedArgument)
-            })
+            call = access.captured.call
+            external = None
+            if isinstance(call.function, ast.Name) and call.function.origin:
+                if self.registry.has_function(call.function.name, call.function.origin):
+                    external = self.registry.resolve(call.function.name, call.function.origin)
+            if external is not None:
+                # Der normale Ausdrucksprüfer validiert positionale und benannte Argumente.
+                self.infer(call, scope, external.type.result)
+                spec: CalculationSpec | ExternalFunction = external
+                errors: tuple[ErrorSpec, ...] = ()
+                effects = tuple(
+                    EffectOutputSpec(item.name, item.effect)
+                    for item in external.effect_outputs
+                )
+                normal_types = {external.symbol: external.type.result}
+                normal_targets = {external.symbol: external.symbol}
+                symbol = external.symbol
+            else:
+                _, calculation = self.infer_calculation_call(call, scope)
+                spec = calculation
+                errors = calculation.possible_errors({
+                    item.name for item in call.arguments
+                    if isinstance(item, ast.NamedArgument)
+                })
+                effects = calculation.possible_effects()
+                normal_types = {
+                    name: calculation.output_types[name]
+                    for name in ({calculation.symbol} | (
+                        calculation.allowed_arguments() & set(calculation.output_types)
+                    ))
+                }
+                normal_targets = {name: name for name in normal_types}
+                symbol = calculation.symbol
             by_name: dict[str, list[ErrorSpec]] = {}
             for error in errors:
                 by_name.setdefault(error.name, []).append(error)
+            effects_by_name = {effect.name: effect for effect in effects}
             caught: dict[str, ErrorSpec] = {}
+            caught_effects: dict[str, EffectOutputSpec] = {}
             types: dict[str, Type] = {}
-            reachable_outputs = {spec.symbol} | (spec.allowed_arguments() & set(spec.output_types))
+            recognized = set(by_name) | set(effects_by_name) | set(normal_types)
+            aliases = [name for name in access.captured.outputs if name not in recognized]
+            if len(aliases) == 1 and symbol not in access.captured.outputs:
+                normal_types[aliases[0]] = (
+                    spec.type.result if isinstance(spec, ExternalFunction)
+                    else spec.result_type
+                )
+                normal_targets[aliases[0]] = symbol
+            elif aliases:
+                raise LangNameError(
+                    f"Berechnung {symbol!r} besitzt keinen Ausgang {aliases[0]!r}"
+                )
             for name in access.captured.outputs:
                 matches = by_name.get(name, [])
                 if len(matches) > 1:
                     raise LangTypeError(f"Fehlerausgang {name!r} ist mehrdeutig")
                 if matches:
                     caught[name] = matches[0]
-                    payload = matches[0].payload or BOOL
-                    types[name] = NullableType(payload)
-                elif name in reachable_outputs:
-                    types[name] = spec.output_types[name]
+                    types[name] = NullableType(matches[0].payload or BOOL)
+                elif name in effects_by_name:
+                    caught_effects[name] = effects_by_name[name]
+                    types[name] = ListType(effects_by_name[name].effect.payload)
+                elif name in normal_types:
+                    types[name] = normal_types[name]
                 else:
-                    raise LangNameError(f"Berechnung {spec.symbol!r} besitzt keinen Ausgang {name!r}")
+                    raise LangNameError(f"Berechnung {symbol!r} besitzt keinen Ausgang {name!r}")
             if caught:
                 for name in access.captured.outputs:
-                    if name not in caught:
+                    if name not in caught and name not in caught_effects:
                         types[name] = self.as_nullable(types[name])
             self.capture_types[key] = types
-            self.captures[key] = CaptureInfo(spec, caught)
+            self.captures[key] = CaptureInfo(
+                spec, caught, caught_effects,
+                {name: target for name, target in normal_targets.items() if name in types},
+            )
         return self.capture_types[key][access.name]
 
     def is_fully_resolved(self, type_: Type, seen: set[int] | None = None) -> bool:

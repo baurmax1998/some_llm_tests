@@ -70,6 +70,11 @@ def check_definition_order(program: ast.Program) -> None:
         raise error
 
     required = expression_names(program.bindings[0].value)
+    for declaration in program.emits:
+        required.update(expression_names(declaration.payload))
+    for declaration in program.listeners:
+        if declaration.filter is not None:
+            required.update(expression_names(declaration.filter))
     index = 1
     while index < len(program.bindings):
         binding = program.bindings[index]

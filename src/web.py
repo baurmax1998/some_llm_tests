@@ -6,14 +6,17 @@ der erzeugten Browserdateien.
 """
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 import html
 import json
 from pathlib import Path
+import re
 import threading
 from typing import Any
 
 from .lang import Evaluator, LangCalculationError, LangError, compile_program, standard_registry
+from .lang.effects import EffectMessage, EffectSubscription
 from .lang.types import ListType, MapType, NullableType, Primitive, RecordType, Type, prune
 
 
@@ -230,7 +233,7 @@ class HotSicProgram:
             self._checked = checked
             self._stamp = stamp
 
-    def execute(self, arguments: dict[str, Any]) -> Any:
+    def execute_result(self, arguments: dict[str, Any]):
         self._load()
         converted = {
             name: _coerce_http_value(value, self._checked.inputs.get(name))
@@ -238,7 +241,43 @@ class HotSicProgram:
         }
         with self.execution_lock:
             # Evaluator-Zustand ist absichtlich pro Request frisch.
-            return Evaluator(self._checked, self._registry, converted).run().value
+            evaluator = Evaluator(self._checked, self._registry, converted)
+            try:
+                return evaluator.run()
+            except LangError as exc:
+                # Erfolgreiche Unteroperationen können die Außenwelt bereits
+                # verändert haben, auch wenn das umgebende Goal fehlschlägt.
+                exc.effects = tuple(evaluator.outgoing_messages())  # type: ignore[attr-defined]
+                raise
+
+    def execute(self, arguments: dict[str, Any]) -> Any:
+        return self.execute_result(arguments).value
+
+
+class EffectHub:
+    """Prozesslokale Verteilung an aktive View-Instanzen."""
+
+    def __init__(self) -> None:
+        self._views: dict[
+            object, tuple[tuple[EffectSubscription, ...], asyncio.Queue[None]]
+        ] = {}
+
+    def replace(
+        self, token: object, subscriptions: tuple[EffectSubscription, ...],
+        queue: asyncio.Queue[None],
+    ) -> None:
+        self._views[token] = (subscriptions, queue)
+
+    def remove(self, token: object) -> None:
+        self._views.pop(token, None)
+
+    def publish(self, messages: tuple[EffectMessage, ...]) -> None:
+        for subscriptions, queue in tuple(self._views.values()):
+            if any(
+                subscription.matches(message)
+                for subscription in subscriptions for message in messages
+            ) and queue.empty():
+                queue.put_nowait(None)
 
 
 def _browser_runtime(endpoints: tuple[EndpointConfig, ...]) -> str:
@@ -254,33 +293,47 @@ function definition(name) {{
   if (!value) throw new Error(`Unbekanntes SIC-Goal: ${{name}}`);
   return value;
 }}
+const websocketProtocol = location.protocol === "https:" ? "wss:" : "ws:";
+const socket = new WebSocket(`${{websocketProtocol}}//${{location.host}}/__sic_ws?page=${{encodeURIComponent(location.pathname)}}`);
+const pendingCalls = new Map();
+let callSequence = 0;
+const socketReady = new Promise((resolve, reject) => {{
+  socket.addEventListener("open", resolve, {{once: true}});
+  socket.addEventListener("error", () => reject(new Error("WebSocket-Verbindung fehlgeschlagen")), {{once: true}});
+}});
 async function call(name, values = {{}}) {{
-  const endpoint = definition(name);
-  const payload = {{...values}};
-  let path = endpoint.path.replace(/\\{{([^}}]+)\\}}/g, (_, key) => {{
-    if (!(key in payload)) throw new Error(`Fehlender Pfadwert: ${{key}}`);
-    const value = encodeURIComponent(payload[key]);
-    delete payload[key];
-    return value;
+  definition(name);
+  await socketReady;
+  const id = String(++callSequence);
+  return new Promise((resolve, reject) => {{
+    pendingCalls.set(id, {{resolve, reject}});
+    socket.send(JSON.stringify({{type: "call", id, name, values: {{...values}}}}));
   }});
-  const options = {{method: endpoint.method, headers: {{Accept: "application/json"}}}};
-  if (endpoint.method === "GET") {{
-    const query = new URLSearchParams(payload).toString();
-    if (query) path += (path.includes("?") ? "&" : "?") + query;
-  }} else {{
-    options.headers["Content-Type"] = "application/json";
-    options.body = JSON.stringify(payload);
-  }}
-  const response = await fetch(path, options);
-  const contentType = response.headers.get("content-type") || "";
-  const result = contentType.includes("json") ? await response.json() : await response.text();
-  if (!response.ok) {{
-    const error = new Error(result.detail || `HTTP ${{response.status}}`);
-    error.response = result;
-    throw error;
-  }}
-  return result;
 }}
+socket.addEventListener("message", event => {{
+  const message = JSON.parse(event.data);
+  if (message.type === "replace") {{
+    const root = document.getElementById("sic-root");
+    if (root) root.innerHTML = message.html;
+    return;
+  }}
+  const pending = pendingCalls.get(String(message.id));
+  if (!pending) return;
+  pendingCalls.delete(String(message.id));
+  if (message.type === "result") {{
+    pending.resolve(message.result);
+  }} else {{
+    const error = new Error(message.detail || message.error || "SIC-Aktion fehlgeschlagen");
+    error.response = message;
+    pending.reject(error);
+  }}
+}});
+socket.addEventListener("close", () => {{
+  for (const pending of pendingCalls.values()) {{
+    pending.reject(new Error("WebSocket-Verbindung wurde geschlossen"));
+  }}
+  pendingCalls.clear();
+}});
 function show(name, value) {{
   document.querySelectorAll(`[data-sic-output="${{name}}"]`).forEach(node => {{
     node.textContent = typeof value === "string" ? value : JSON.stringify(value, null, 2);
@@ -296,7 +349,6 @@ document.addEventListener("submit", async event => {{
     const result = await call(name, values);
     show(name, result);
     document.dispatchEvent(new CustomEvent("sic:result", {{detail: {{name, result}}}}));
-    window.location.reload();
   }} catch (error) {{
     show(name, error.response || error.message);
     document.dispatchEvent(new CustomEvent("sic:error", {{detail: {{name, error}}}}));
@@ -310,7 +362,6 @@ document.addEventListener("click", async event => {{
   const result = await call(name, values);
   show(name, result);
   document.dispatchEvent(new CustomEvent("sic:result", {{detail: {{name, result}}}}));
-  window.location.reload();
 }});
 window.sic = {{call, endpoints: definitions}};
 """.strip()
@@ -353,7 +404,7 @@ def build_web(config_path: str | Path = "app.sic") -> list[Path]:
             '<meta charset="utf-8">',
             '<meta name="viewport" content="width=device-width, initial-scale=1">',
             f"<title>{html.escape(title)}</title>", f"<style>{css}</style>",
-            "</head>", "<body>", body,
+            "</head>", '<body><main id="sic-root">', body, "</main>",
             f"<script type=\"module\">{runtime}\n\n{script}</script>",
             "</body>", "</html>", "",
         ])
@@ -365,7 +416,7 @@ def build_web(config_path: str | Path = "app.sic") -> list[Path]:
 def create_app(config_path: str | Path = "app.sic"):
     """Erzeugt eine FastAPI-App; SIC-Endpunkte werden bei Änderungen neu geladen."""
     try:
-        from fastapi import FastAPI, Request
+        from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
         from fastapi.concurrency import run_in_threadpool
         from fastapi.responses import FileResponse, JSONResponse
     except ImportError as exc:  # pragma: no cover - verständlich bei Minimalinstallation
@@ -376,6 +427,7 @@ def create_app(config_path: str | Path = "app.sic"):
     build_web(config_path)
     app = FastAPI(title=config.title)
     execution_lock = threading.RLock()  # schützt die vorläufige JSON-Dateipersistenz
+    effect_hub = EffectHub()
 
     def response_for(value: Any):
         if (
@@ -415,16 +467,17 @@ def create_app(config_path: str | Path = "app.sic"):
             if isinstance(body, dict):
                 arguments.update(body)
             try:
-                value = await run_in_threadpool(program.execute, arguments)
-                # Deklarative Apps lesen ihre Daten als normale Backend-
-                # Abhängigkeiten. Nach einer Aktion wird die statische Seite
-                # neu ausgewertet, bevor der Browser sie erneut lädt.
-                await run_in_threadpool(build_web, config_path)
-                return response_for(value)
+                result = await run_in_threadpool(program.execute_result, arguments)
+                # Meldungen werden erst nach dem abgeschlossenen Aktionsaufruf
+                # verteilt; dadurch sieht keine View einen halben Schreibvorgang.
+                effect_hub.publish(result.effects)
+                return response_for(result.value)
             except LangCalculationError as exc:
+                effect_hub.publish(getattr(exc, "effects", ()))
                 detail = exc.payload if exc.payload is not None else exc.name
                 return JSONResponse({"error": exc.name, "detail": detail}, status_code=422)
             except LangError as exc:
+                effect_hub.publish(getattr(exc, "effects", ()))
                 return JSONResponse({"detail": str(exc)}, status_code=422)
             except (OSError, ValueError) as exc:
                 return JSONResponse({"detail": str(exc)}, status_code=500)
@@ -433,13 +486,181 @@ def create_app(config_path: str | Path = "app.sic"):
         handler.__annotations__["request"] = Request
         return handler
 
+    programs: dict[str, HotSicProgram] = {}
+    endpoints_by_name = {endpoint.name: endpoint for endpoint in config.endpoints}
     for endpoint in config.endpoints:
         program = HotSicProgram(
             endpoint.source, config.root, config.modules, execution_lock
         )
+        programs[endpoint.name] = program
         app.add_api_route(
             endpoint.path, make_handler(program), methods=[endpoint.method], name=endpoint.name
         )
+
+    def evaluate_live_page(pathname: str):
+        wanted = pathname.lstrip("/") or "index.html"
+        for source_path in config.pages:
+            registry = _project_registry(config.root, config.modules, config.endpoints)
+            checked = compile_program(source_path.read_text(encoding="utf-8"), registry)
+            with execution_lock:
+                result = Evaluator(checked, registry).run()
+            page_type = prune(checked.bindings[checked.program.goal.name])
+            is_view = isinstance(page_type, Primitive) and page_type.name == "View::web"
+            if is_view:
+                output, body = "index.html", result.value
+            elif isinstance(result.value, dict):
+                output = result.value.get("output", "index.html")
+                body = result.value.get("html", "")
+            else:
+                continue
+            if output == wanted:
+                return body, result.subscriptions
+        raise ValueError(f"Unbekannte SIC-Seite: {pathname}")
+
+    async def execute_socket_call(websocket, message: dict[str, Any]) -> None:
+        call_id = str(message.get("id", ""))
+        name = message.get("name")
+        values = message.get("values", {})
+        if not isinstance(name, str) or name not in programs:
+            await websocket.send_json({
+                "type": "error", "id": call_id,
+                "detail": f"Unbekanntes SIC-Goal: {name}",
+            })
+            return
+        if not isinstance(values, dict):
+            await websocket.send_json({
+                "type": "error", "id": call_id,
+                "detail": "Aktionswerte müssen ein Record sein",
+            })
+            return
+
+        endpoint = endpoints_by_name[name]
+        path = endpoint.path
+        path_parameters: dict[str, Any] = {}
+        for parameter in re.findall(r"\{([^}]+)\}", endpoint.path):
+            if parameter not in values:
+                await websocket.send_json({
+                    "type": "error", "id": call_id,
+                    "detail": f"Fehlender Pfadwert: {parameter}",
+                })
+                return
+            path_parameters[parameter] = values[parameter]
+            path = path.replace("{" + parameter + "}", str(values[parameter]))
+        remaining = {
+            key: value for key, value in values.items()
+            if key not in path_parameters
+        }
+        query = remaining if endpoint.method == "GET" else {}
+        body: Any = None if endpoint.method == "GET" else remaining
+        request_value = {
+            "method": endpoint.method,
+            "path": path,
+            "query": query,
+            "pathParams": path_parameters,
+            "headers": dict(websocket.headers),
+            "body": body,
+        }
+        arguments: dict[str, Any] = {
+            "request": request_value, **values,
+        }
+        try:
+            result = await run_in_threadpool(
+                programs[name].execute_result, arguments
+            )
+            effect_hub.publish(result.effects)
+            value = result.value
+            if (
+                isinstance(value, dict) and type(value.get("status")) is int
+                and "body" in value
+            ):
+                if value["status"] >= 400:
+                    await websocket.send_json({
+                        "type": "error", "id": call_id,
+                        "status": value["status"], "detail": value["body"],
+                    })
+                    return
+                value = value["body"]
+            await websocket.send_json({
+                "type": "result", "id": call_id, "result": value,
+            })
+        except LangCalculationError as exc:
+            effect_hub.publish(getattr(exc, "effects", ()))
+            detail = exc.payload if exc.payload is not None else exc.name
+            await websocket.send_json({
+                "type": "error", "id": call_id,
+                "error": exc.name, "detail": detail,
+            })
+        except LangError as exc:
+            effect_hub.publish(getattr(exc, "effects", ()))
+            await websocket.send_json({
+                "type": "error", "id": call_id, "detail": str(exc),
+            })
+        except (OSError, ValueError) as exc:
+            await websocket.send_json({
+                "type": "error", "id": call_id, "detail": str(exc),
+            })
+
+    async def live_updates(websocket):
+        await websocket.accept()
+        token = object()
+        queue: asyncio.Queue[None] = asyncio.Queue(maxsize=1)
+        pathname = websocket.query_params.get("page", "/")
+
+        async def refresh() -> None:
+            body, subscriptions = await run_in_threadpool(
+                evaluate_live_page, pathname
+            )
+            effect_hub.replace(token, subscriptions, queue)
+            await websocket.send_json({"type": "replace", "html": body})
+
+        try:
+            await refresh()
+            while True:
+                update = asyncio.create_task(queue.get())
+                incoming = asyncio.create_task(websocket.receive())
+                done, pending = await asyncio.wait(
+                    {update, incoming}, return_when=asyncio.FIRST_COMPLETED
+                )
+                for task in pending:
+                    task.cancel()
+                if update in done:
+                    await refresh()
+                if incoming in done:
+                    event = incoming.result()
+                    if event.get("type") == "websocket.disconnect":
+                        break
+                    raw = event.get("text")
+                    if raw is None:
+                        await websocket.send_json({
+                            "type": "error", "id": "",
+                            "detail": "WebSocket-Nachricht muss JSON-Text sein",
+                        })
+                        continue
+                    try:
+                        message = json.loads(raw)
+                    except json.JSONDecodeError:
+                        await websocket.send_json({
+                            "type": "error", "id": "",
+                            "detail": "Ungültiges JSON",
+                        })
+                        continue
+                    if isinstance(message, dict) and message.get("type") == "call":
+                        await execute_socket_call(websocket, message)
+                    else:
+                        await websocket.send_json({
+                            "type": "error", "id": str(message.get("id", ""))
+                            if isinstance(message, dict) else "",
+                            "detail": "Unbekannte WebSocket-Nachricht",
+                        })
+        except WebSocketDisconnect:
+            pass
+        finally:
+            effect_hub.remove(token)
+
+    # FastAPI wertet wegen ``from __future__ import annotations`` sonst den
+    # lokal importierten WebSocket-Typ nicht auf.
+    live_updates.__annotations__["websocket"] = WebSocket
+    app.add_api_websocket_route("/__sic_ws", live_updates)
 
     index = config.output / "index.html"
     if index.exists():

@@ -20,6 +20,7 @@ from ..types import (
 def _calculation(checked: CheckedProgram, symbol: str) -> CalculationSpec:
     from ..dependencies import expression_names
 
+    is_goal = symbol == checked.program.goal.name
     return CalculationSpec(
         symbol=symbol,
         origin=(),
@@ -31,6 +32,11 @@ def _calculation(checked: CheckedProgram, symbol: str) -> CalculationSpec:
         },
         direct_errors=dict(checked.direct_errors),
         checked=checked,
+        effect_outputs=checked.effect_outputs if is_goal else (),
+        listeners=checked.listeners if is_goal else (),
+        void_effects=checked.void_effects,
+        ignore_effects=checked.ignore_effects,
+        completion_dependencies=set(checked.completion_dependencies) if is_goal else set(),
     )
 
 
@@ -128,6 +134,13 @@ def _interface_type(type_: Type) -> str:
         parameters = ", ".join(_interface_type(item) for item in type_.parameters)
         return f"({parameters}) -> {_interface_type(type_.result)}"
     return format_type(type_)
+
+
+def _type_ref(reference: ast.TypeRef) -> str:
+    name = "::".join((reference.name, *reference.origin))
+    if reference.arguments:
+        name += "<" + ", ".join(_type_ref(item) for item in reference.arguments) + ">"
+    return name + ("?" if reference.nullable else "")
 
 
 def _error_value(error: ErrorSpec) -> dict[str, object]:
@@ -241,6 +254,7 @@ def describe_program(checked: CheckedProgram, source: str) -> dict[str, object]:
     calculations: list[dict[str, object]] = []
     binding_by_name = {binding.name: binding for binding in checked.program.bindings}
     all_types: list[Type] = [*checked.bindings.values(), *checked.inputs.values()]
+    all_types.extend(effect.effect.payload for effect in checked.effect_outputs)
     for errors in checked.direct_errors.values():
         all_types.extend(error.payload for error in errors if error.payload is not None)
 
@@ -273,6 +287,14 @@ def describe_program(checked: CheckedProgram, source: str) -> dict[str, object]:
                     for name in output_names
                 },
                 "errors": [_error_value(error) for error in errors],
+                "effects": [
+                    {
+                        "name": output.name,
+                        "effect": "::".join(output.effect.identity),
+                        "type": _interface_type(output.effect.payload),
+                    }
+                    for output in spec.possible_effects()
+                ],
             })
         calculations.append({
             "name": binding.name,
@@ -291,10 +313,14 @@ def describe_program(checked: CheckedProgram, source: str) -> dict[str, object]:
     return {
         "format": "sic-interface-v1",
         "source": source,
-        "goal": checked.program.goal.name,
+        "goal": checked.program.goal.name if checked.program.bindings else None,
         "package": _package_name(source),
         "imports": _program_imports(checked.program),
         "types": _collect_records(all_types),
+        "effects": [
+            {"name": effect.name, "type": _type_ref(effect.payload)}
+            for effect in checked.program.effects
+        ],
         "calculations": calculations,
     }
 

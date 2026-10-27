@@ -44,6 +44,14 @@ def render_interface(description: dict[str, object]) -> str:
             lines.append(f"    {field_type} {field_name};")
         lines.extend(["}", ""])
 
+    effects = description.get("effects", [])
+    assert isinstance(effects, list)
+    for effect in effects:
+        assert isinstance(effect, dict)
+        lines.append(f"effect {effect['name']}: {effect['type']};")
+    if effects:
+        lines.append("")
+
     calculations = description["calculations"]
     assert isinstance(calculations, list)
     for calculation_index, calculation in enumerate(calculations):
@@ -64,6 +72,7 @@ def render_interface(description: dict[str, object]) -> str:
         overrides: set[str] = set()
         outputs: dict[str, str] = {}
         errors_by_identity: dict[str, dict[str, object]] = {}
+        effects_by_name: dict[str, dict[str, object]] = {}
         for signature in signatures:
             assert isinstance(signature, dict)
             inputs.update(signature["inputs"])
@@ -71,6 +80,8 @@ def render_interface(description: dict[str, object]) -> str:
             outputs.update(signature["outputs"])
             for error in signature["errors"]:
                 errors_by_identity[str(error["identity"])] = error
+            for effect in signature.get("effects", []):
+                effects_by_name[str(effect["name"])] = effect
 
         required = sorted(set(inputs) - overrides)
         optional = [name for name in defaults if name in overrides]
@@ -100,6 +111,14 @@ def render_interface(description: dict[str, object]) -> str:
         if errors_by_identity:
             errors = [errors_by_identity[key] for key in sorted(errors_by_identity)]
             lines.append(f"    throws {_throws(errors)}")
+        if effects_by_name:
+            lines.append("    emits {")
+            for name in sorted(effects_by_name):
+                effect = effects_by_name[name]
+                lines.append(
+                    f"        {effect['type']} {name}: {effect['effect']};"
+                )
+            lines.append("    }")
         lines[-1] += ";"
 
     lines.append("")

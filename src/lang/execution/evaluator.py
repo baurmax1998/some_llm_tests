@@ -4,8 +4,9 @@ from functools import reduce
 from typing import Any, Callable
 from .. import ast
 from ..checker import CheckedProgram
+from ..effects import EffectMessage, EffectSubscription
 from ..errors import LangCalculationError, LangRuntimeError
-from ..registry import ModuleRegistry
+from ..registry import ExternalFunction, ModuleRegistry
 from .models import ExecutionResult
 from .validation import validate_runtime_value
 
@@ -24,11 +25,17 @@ class Evaluator:
         self.overrides = dict(overrides or {})
         self.identity_origin = identity_origin
         self.captured_values: dict[int, dict[str, Any]] = {}
+        self.messages: list[EffectMessage] = []
+        self.subscriptions: list[EffectSubscription] = []
+        self._goal_finalized = False
         self.capture_actions = False
 
     def run(self) -> ExecutionResult:
         goal = self.checked.program.goal.name
-        return ExecutionResult(goal, self.resolve(goal))
+        value = self.resolve(goal)
+        return ExecutionResult(
+            goal, value, tuple(self.outgoing_messages()), tuple(self.subscriptions)
+        )
 
     def call(self, name: str, **arguments: Any) -> Any:
         """Ruft ein Goal oder Let von Python aus mit denselben Override-Regeln auf."""
@@ -54,6 +61,8 @@ class Evaluator:
             value = self.evaluate(self.definitions[name], {})
             validate_runtime_value(value, self.checked.bindings[name], name)
             self.values[name] = value
+            if name == self.checked.program.goal.name:
+                self.finalize_goal()
             return value
         finally:
             self.active.remove(name)
@@ -181,6 +190,13 @@ class Evaluator:
         if isinstance(expression, ast.Call):
             external = self.checked.external_calls.get(id(expression))
             if external is not None:
+                if not external.parameter_names:
+                    positional = [
+                        self.evaluate(argument, local)
+                        for argument in expression.arguments
+                        if not isinstance(argument, ast.NamedArgument)
+                    ]
+                    return external.implementation(*positional)
                 arguments: dict[str, Any] = {}
                 positional_index = 0
                 for argument in expression.arguments:
@@ -190,7 +206,23 @@ class Evaluator:
                         name, value = external.parameter_names[positional_index], argument
                         positional_index += 1
                     arguments[name] = self.evaluate(value, local)
-                return external.implementation(**arguments)
+                result = external.implementation(**arguments)
+                for listener in external.automatic_listeners:
+                    if listener.effect.identity in self.checked.ignore_effects:
+                        continue
+                    payload = arguments[listener.payload_parameter]
+                    if listener.normalize is not None:
+                        payload = listener.normalize(payload)
+                    self.subscriptions.append(EffectSubscription(
+                        listener.effect, payload, True, True
+                    ))
+                for output in external.effect_outputs:
+                    payload = arguments[output.payload_parameter]
+                    if output.normalize is not None:
+                        payload = output.normalize(payload)
+                    validate_runtime_value(payload, output.effect.payload, output.name)
+                    self.messages.append(EffectMessage(output.effect, payload, output.name))
+                return result
             spec = self.checked.call_specs.get(id(expression))
             if spec is not None:
                 arguments = {
@@ -203,7 +235,12 @@ class Evaluator:
                         "__sic_action__": spec.symbol,
                         "arguments": arguments,
                     }
-                return self.invoke_calculation(spec, arguments).resolve(spec.symbol)
+                nested = self.invoke_calculation(spec, arguments)
+                try:
+                    result = nested.resolve(spec.symbol)
+                finally:
+                    self.absorb(nested)
+                return result
             function = self.evaluate(expression.function, local)
             return function(*(self.evaluate(argument, local) for argument in expression.arguments))
         if isinstance(expression, ast.SafeMethodCall):
@@ -232,23 +269,77 @@ class Evaluator:
         checked = spec.checked or self.checked
         return Evaluator(checked, self.registry, arguments, spec.origin)
 
+    def finalize_goal(self) -> None:
+        if self._goal_finalized:
+            return
+        self._goal_finalized = True
+        declarations = {item.name: item for item in self.checked.program.emits}
+        for output in self.checked.effect_outputs:
+            declaration = declarations[output.name]
+            payload = self.evaluate(declaration.payload, {})
+            validate_runtime_value(payload, output.effect.payload, output.name)
+            self.messages.append(EffectMessage(output.effect, payload, output.name))
+        for checked_listener in self.checked.listeners:
+            declaration = checked_listener.declaration
+            if declaration.filter is None:
+                self.subscriptions.append(EffectSubscription(checked_listener.effect))
+            else:
+                payload = self.evaluate(declaration.filter, {})
+                validate_runtime_value(payload, checked_listener.effect.payload, "on")
+                self.subscriptions.append(EffectSubscription(
+                    checked_listener.effect, payload, True
+                ))
+
+    def outgoing_messages(self) -> list[EffectMessage]:
+        return [
+            message for message in self.messages
+            if message.effect.identity not in self.checked.void_effects
+        ]
+
+    def absorb(
+        self, nested: "Evaluator", caught: frozenset[tuple[str, ...]] = frozenset()
+    ) -> None:
+        self.messages.extend(
+            message for message in nested.outgoing_messages()
+            if message.effect.identity not in caught
+        )
+        self.subscriptions.extend(nested.subscriptions)
+
     def evaluate_capture(self, captured: ast.CapturedCall, local: dict[str, Any]) -> dict[str, Any]:
         info = self.checked.captures[id(captured)]
+        values = {name: None for name in captured.outputs}
+        if isinstance(info.spec, ExternalFunction):
+            before = len(self.messages)
+            result = self.evaluate(captured.call, local)
+            produced = self.messages[before:]
+            del self.messages[before:]
+            for name in info.normal_outputs:
+                values[name] = result
+            caught_names = frozenset(info.caught_effects)
+            for name, output in info.caught_effects.items():
+                values[name] = [
+                    message.payload for message in produced
+                    if message.output == name
+                    and message.effect.identity == output.effect.identity
+                ]
+            self.messages.extend(
+                message for message in produced if message.output not in caught_names
+            )
+            return values
+
         arguments = {
             argument.name: self.evaluate(argument.value, local)
             for argument in captured.call.arguments
             if isinstance(argument, ast.NamedArgument)
         }
         evaluator = self.invoke_calculation(info.spec, arguments)
-        normal = [name for name in captured.outputs if name not in info.caught]
-        values = {name: None for name in captured.outputs}
+        normal = list(info.normal_outputs)
         try:
             # Das Hauptergebnis bestimmt Erfolg oder Fehler. Erst danach werden
             # angeforderte Zwischenwerte aus derselben Auswertung entnommen.
             evaluator.resolve(info.spec.symbol)
             for name in normal:
-                values[name] = evaluator.resolve(name)
-            return values
+                values[name] = evaluator.resolve(info.normal_outputs[name])
         except LangCalculationError as error:
             match = next(
                 (name for name, declared in info.caught.items()
@@ -257,9 +348,22 @@ class Evaluator:
                 None,
             )
             if match is None:
+                self.absorb(evaluator)
                 raise
             values[match] = error.payload if info.caught[match].payload is not None else True
-            return values
+        caught_names = frozenset(info.caught_effects)
+        outgoing = evaluator.outgoing_messages()
+        for name, output in info.caught_effects.items():
+            values[name] = [
+                message.payload for message in outgoing
+                if message.output == name
+                and message.effect.identity == output.effect.identity
+            ]
+        self.messages.extend(
+            message for message in outgoing if message.output not in caught_names
+        )
+        self.subscriptions.extend(evaluator.subscriptions)
+        return values
 
     def evaluate_method(self, values: Any, name: str, arguments: list[Any]) -> Any:
         if name == "keys": return list(values.keys())

@@ -1,3 +1,7 @@
+void FileChanged::files::std
+ignore FileChanged::files::std
+emit todosChanged: Todos::effects::backend = createTodo.id
+
 goal createTodo: Todo =
     if saved then todo else err persistenceError = "Todo konnte nicht gespeichert werden"
 let saved = write_json::files::std(updated, "backend/todos.json")

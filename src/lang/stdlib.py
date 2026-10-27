@@ -6,6 +6,7 @@ from pathlib import Path
 import re
 from typing import Any
 
+from .effects import ExternalAutoListener, ExternalEffectOutput
 from .registry import ModuleRegistry
 from .types import (
     BOOL, INT, STRING, FunctionType, ListType, MapType, Primitive, RecordType, TypeVariable,
@@ -146,23 +147,42 @@ def standard_registry(root: str | Path | None = None) -> ModuleRegistry:
         attributes, _ = action_attributes(on_click, False)
         return '<button type="button"' + attributes + ">" + html.escape(label, quote=True) + "</button>"
 
+    file_changed = registry.register_effect(
+        "FileChanged", ("files", "std"), STRING
+    )
+
+    def canonical_path(raw: str) -> str:
+        return str(resolve_path(raw).resolve())
+
     json_value = TypeVariable(-1)
     printed_value = TypeVariable(-2)
     registry.register(
         "read_json", ("files", "std"), FunctionType([STRING], json_value),
         read_json, ("path",),
+        automatic_listeners=(
+            ExternalAutoListener(file_changed, "path", canonical_path),
+        ),
     )
     registry.register(
         "write_json", ("files", "std"), FunctionType([json_value, STRING], BOOL),
         write_json, ("value", "path"),
+        effect_outputs=(
+            ExternalEffectOutput("fileChanged", file_changed, "path", canonical_path),
+        ),
     )
     registry.register(
         "read_text", ("files", "std"), FunctionType([STRING], STRING),
         read_text, ("path",),
+        automatic_listeners=(
+            ExternalAutoListener(file_changed, "path", canonical_path),
+        ),
     )
     registry.register(
         "write_text", ("files", "std"), FunctionType([STRING, STRING], BOOL),
         write_text, ("value", "path"),
+        effect_outputs=(
+            ExternalEffectOutput("fileChanged", file_changed, "path", canonical_path),
+        ),
     )
     registry.register(
         "print", ("console", "std"),

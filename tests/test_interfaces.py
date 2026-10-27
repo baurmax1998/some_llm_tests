@@ -116,17 +116,17 @@ def test_web_project_uses_declared_sources_and_backend_registry(tmp_path: Path):
             port: 8000,
             pages: ["frontend/app.sic"],
             endpoints: [
-                {name: "greet", method: "GET", path: "/greet", source: "backend/greet.sic"}
+                {name: "greeting", method: "GET", path: "/greet", source: "backend/greet.sic"}
             ]
         }
         ''',
         encoding="utf-8",
     )
     (tmp_path / "backend" / "greet.sic").write_text(
-        'goal greet: String = "Hallo " + (name: String)\n', encoding="utf-8"
+        'goal greeting: String = "Hallo " + (name: String)\n', encoding="utf-8"
     )
     (tmp_path / "frontend" / "app.sic").write_text(
-        'goal view: View::web = Text::web(greet::backend(name: "SIC"))\n',
+        'goal view: View::web = Text::web(greeting::backend(name: "SIC"))\n',
         encoding="utf-8",
     )
     # Auch noch nicht in app.sic deklarierte SIC-Dateien gehören zur Codebasis.
@@ -148,6 +148,7 @@ def test_web_project_uses_declared_sources_and_backend_registry(tmp_path: Path):
         "web/Text.i",
         "web/View.i",
     } <= relative
+    assert "backend/greeting.i" not in relative
     assert "package web.Text;" in (
         tmp_path / ".out" / "i" / "web" / "Text.i"
     ).read_text(encoding="utf-8")
@@ -159,8 +160,8 @@ def test_web_project_uses_declared_sources_and_backend_registry(tmp_path: Path):
     frontend_tree = (
         tmp_path / ".out" / "t" / "frontend" / "app"
     ).read_text(encoding="utf-8")
-    assert "import backend.greet" in frontend_tree
-    assert "goal greet: String" in frontend_tree
+    assert "import backend.greeting" in frontend_tree
+    assert "goal greeting: String" in frontend_tree
     assert "input name: String" in frontend_tree
 
     app_tree = (tmp_path / ".out" / "t" / "app").read_text(encoding="utf-8")

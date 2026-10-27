@@ -5,6 +5,7 @@ from dataclasses import replace
 from ..ast import (
     Annotation, Binary, Binding, BindingPattern, Call, CapturedCall, ErrorExpr,
     Expr, Field, IfExpr, Index, Lambda, ListExpr, Literal, LiteralPattern,
+    EffectDeclaration, EffectSuppression, EmitDeclaration, ListenerDeclaration,
     LocalLet, MapExpr, MatchCase, MatchExpr, MethodCall, Name, NamedArgument,
     NullPattern, OutputAccess, Program, RecordExpr, SafeField, SafeMethodCall,
     SourceSpan, StringBuilder, TypeRef, Unary, WildcardPattern,
@@ -59,9 +60,42 @@ class ParserCore:
 
     def parse_program(self) -> Program:
         bindings: list[Binding] = []
+        effects: list[EffectDeclaration] = []
+        emits: list[EmitDeclaration] = []
+        listeners: list[ListenerDeclaration] = []
+        voids: list[EffectSuppression] = []
+        ignores: list[EffectSuppression] = []
         while self.current.kind != "EOF":
             binding_start = self.current.offset
             keyword = self.expect("NAME").value
+            if keyword == "effect":
+                name = self.expect("NAME").value
+                self.expect(":")
+                effects.append(EffectDeclaration(
+                    name, self.parse_type(), SourceSpan(binding_start, self.current.offset)
+                ))
+                continue
+            if keyword in {"emit", "on", "void", "ignore"}:
+                if keyword == "emit":
+                    name = self.expect("NAME").value
+                    self.expect(":")
+                    effect = self.parse_qualified_name()
+                    self.expect("=")
+                    payload = self.parse_expression()
+                    emits.append(EmitDeclaration(
+                        name, effect, payload, SourceSpan(binding_start, self.current.offset)
+                    ))
+                else:
+                    effect = self.parse_qualified_name()
+                    span = SourceSpan(binding_start, self.current.offset)
+                    if keyword == "on":
+                        filter_ = self.parse_expression() if self.match("=") else None
+                        listeners.append(ListenerDeclaration(effect, filter_, span))
+                    else:
+                        (voids if keyword == "void" else ignores).append(
+                            EffectSuppression(effect, span)
+                        )
+                continue
             if keyword not in {"goal", "let"}:
                 if (
                     self.allow_incomplete
@@ -75,7 +109,7 @@ class ParserCore:
                 if not self.match(","):
                     token = self.tokens[self.index - 1]
                     raise LangSyntaxError(
-                        f"Erwartet 'goal', 'let' oder eine Mehrfachbindung, gefunden {keyword!r}",
+                        f"Erwartet eine SIC-Deklaration oder Mehrfachbindung, gefunden {keyword!r}",
                         token.offset, token.offset + len(token.value),
                     )
                 outputs.append(self.expect("NAME").value)
@@ -100,7 +134,7 @@ class ParserCore:
                 span=SourceSpan(binding_start, self.current.offset),
             ))
         goals = sum(binding.is_goal for binding in bindings)
-        if goals != 1:
+        if goals != 1 and not (goals == 0 and not bindings and effects):
             if self.allow_incomplete and goals == 0:
                 raise LangIncompleteError("eine goal-Definition")
             raise LangSyntaxError("Ein Programm muss genau ein goal enthalten")
@@ -108,7 +142,29 @@ class ParserCore:
         duplicate = next((name for name in names if names.count(name) > 1), None)
         if duplicate:
             raise LangSyntaxError(f"Name {duplicate!r} wird mehrfach definiert")
-        return Program(tuple(bindings))
+        effect_names = [effect.name for effect in effects]
+        duplicate_effect = next(
+            (name for name in effect_names if effect_names.count(name) > 1), None
+        )
+        if duplicate_effect:
+            raise LangSyntaxError(f"Effekt {duplicate_effect!r} wird mehrfach definiert")
+        output_names = [emit.name for emit in emits]
+        duplicate_output = next(
+            (name for name in output_names if output_names.count(name) > 1), None
+        )
+        if duplicate_output:
+            raise LangSyntaxError(f"Effekt-Ausgang {duplicate_output!r} wird mehrfach definiert")
+        return Program(
+            tuple(bindings), tuple(effects), tuple(emits), tuple(listeners),
+            tuple(voids), tuple(ignores),
+        )
+
+    def parse_qualified_name(self) -> Name:
+        name = self.expect("NAME").value
+        origin: list[str] = []
+        while self.match("ORIGIN"):
+            origin.append(self.expect("NAME").value)
+        return Name(name, tuple(origin))
 
     def parse_type(self) -> TypeRef:
         name = self.expect("NAME").value
