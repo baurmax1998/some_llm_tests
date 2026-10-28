@@ -798,8 +798,9 @@ wichtig:
 - Fehlerausgänge können beim Abfangen noch nicht umbenannt werden.
 - `sic run` nimmt noch keine freien Eingaben als CLI-Argumente an.
 - Effektverteilung und Webunterstützung sind experimentell. Die Verteilung ist
-  prozesslokal; es gibt noch keinen externen Dateiwächter, keine persistente
-  View-Wiederaufnahme und keine verteilte Genau-einmal-Zustellung.
+  prozesslokal. SIC-Quelldateien werden im Entwicklungsserver überwacht; für
+  externe Änderungen an Nutzdaten gibt es noch keinen allgemeinen Dateiwächter.
+  Persistente View-Wiederaufnahme und verteilte Genau-einmal-Zustellung fehlen.
 - Reaktive Webupdates berechnen derzeit die View neu und ersetzen ihren
   vollständigen Wurzelknoten; feingranulare UI-Patches sind noch offen.
 - LLM-gestützte Generierung ist experimentell.

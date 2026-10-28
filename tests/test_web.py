@@ -3,8 +3,11 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from src.lang import LangTypeError
-from src.web import build_web, create_app, load_web_config
+from src.lang import LangTypeError, compile_program
+from src.web import (
+    _project_registry, _view_source_dependencies, build_web, create_app,
+    load_web_config,
+)
 
 
 def web_project(tmp_path: Path) -> Path:
@@ -190,6 +193,53 @@ def test_all_backend_goals_are_discovered_as_websocket_actions(tmp_path):
                 assert websocket.receive_json() == {
                     "type": "result", "id": str(index), "result": "WS",
                 }
+
+
+def test_view_source_dependencies_exclude_unrelated_backend(tmp_path):
+    config_path = web_project(tmp_path)
+    unrelated = tmp_path / "backend" / "unrelated.sic"
+    unrelated.write_text('goal unrelated: String = "x"', encoding="utf-8")
+    config = load_web_config(config_path)
+    registry = _project_registry(
+        config.root, config.backend, config.backend_programs
+    )
+    page = tmp_path / "page.sic"
+    checked = compile_program(page.read_text(encoding="utf-8"), registry)
+    dependencies = _view_source_dependencies(checked, page, config)
+    assert (tmp_path / "backend" / "greet.sic").resolve() in dependencies
+    assert unrelated.resolve() not in dependencies
+
+
+def test_frontend_source_change_refreshes_open_view(tmp_path):
+    config_path = web_project(tmp_path)
+    app = create_app(config_path)
+    page = tmp_path / "page.sic"
+    with TestClient(app) as client:
+        with client.websocket_connect("/__sic_ws?page=/") as websocket:
+            assert "Hallo SIC" in websocket.receive_json()["html"]
+            source = page.read_text(encoding="utf-8").replace(
+                'name: "SIC"', 'name: "Frontend"'
+            )
+            page.write_text(source, encoding="utf-8")
+            update = websocket.receive_json()
+            assert update["type"] == "replace"
+            assert "Hallo Frontend" in update["html"]
+
+
+def test_backend_dependency_change_refreshes_open_view(tmp_path):
+    config_path = web_project(tmp_path)
+    app = create_app(config_path)
+    backend = tmp_path / "backend" / "greet.sic"
+    with TestClient(app) as client:
+        with client.websocket_connect("/__sic_ws?page=/") as websocket:
+            assert "Hallo SIC" in websocket.receive_json()["html"]
+            backend.write_text(
+                'goal greet: String = "Neu " + (name: String)\n',
+                encoding="utf-8",
+            )
+            update = websocket.receive_json()
+            assert update["type"] == "replace"
+            assert "Neu SIC" in update["html"]
 
 
 def test_websocket_backend_hot_reload(tmp_path):

@@ -55,6 +55,25 @@ Alle Backend-Goals sind über die View-WebSocket-Verbindung aufrufbar. Titel
 Defaults. Backendprogramme werden anhand ihres Änderungszeitpunkts vor einem
 Aufruf automatisch neu kompiliert.
 
+### Code-Hot-Reload
+
+Der Entwicklungsserver überwacht die registrierten Page-Dateien und alle
+`.sic`-Dateien im Backend-Verzeichnis. Für jede aktive View wird aus dem
+geprüften AST der statisch erreichbare Berechnungsgraph auf Quelldateien
+abgebildet:
+
+- Änderungen an ihrer Page lösen unmittelbar eine Neuberechnung aus.
+- Änderungen an einer erreichbaren Backend-Berechnung oder Effektdeklaration
+  invalidieren den Backend-Registry-Stand und berechnen die View neu.
+- Änderungen an nicht erreichbaren Backend-Dateien aktualisieren diese View
+  nicht.
+- Compilerfehler werden über WebSocket als Diagnose eingeblendet; nach der
+  Korrektur versucht der nächste Datei-Event die Berechnung erneut.
+
+Die Neuberechnung ersetzt derzeit weiterhin den vollständigen View-Wurzelknoten.
+Neu angelegte oder entfernte Backend-Dateien sowie Änderungen an `app.sic`
+benötigen vorerst einen Server-Neustart, weil sie die Projektstruktur verändern.
+
 ## Komponenten
 
 HTML wird über zwei kleine, sichere Bausteine erzeugt:

@@ -50,6 +50,8 @@ aus dem aktuellen Datenbestand bestimmt. Die Todo-Zeilen entstehen mit `map`;
 Event-Lambdas rufen unmittelbar die Goals aus dem Paket `backend` auf. Die Aktionen
 melden `Todos::effects::backend`; `listTodos` hört auf diesen fachlichen Effekt.
 Aktive Views werden daraufhin über WebSocket neu ausgewertet, ohne Seiten-Reload.
+Auch Änderungen an der Frontend-Datei oder an statisch erreichbaren
+Backend-Dateien lösen im Entwicklungsserver automatisch eine Neuberechnung aus.
 
 Die UI verwendet die Standardbibliothekstypen `App::web` und `View::web` sowie
 `Column::web`, `Input::web`, `ListView::web`, `Row::web`, `Checkbox::web`,

@@ -7,7 +7,7 @@ der erzeugten Browserdateien.
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, fields, is_dataclass
 import html
 import json
 import logging
@@ -20,6 +20,7 @@ from .lang import (
     Evaluator, LangCalculationError, LangError, compile_program, parse,
     standard_registry,
 )
+from .lang import ast
 from .lang.effects import EffectMessage, EffectSubscription
 from .lang.types import ListType, MapType, NullableType, Primitive, RecordType, Type, prune
 
@@ -148,6 +149,83 @@ def _project_registry(
     return registry
 
 
+def _view_source_dependencies(
+    checked, page_source: Path, config: WebConfig,
+) -> frozenset[Path]:
+    """Ordnet den statisch erreichbaren Berechnungsgraphen Quelldateien zu."""
+    from .lang.dependencies import expression_names
+
+    by_module = {
+        program.module: program.source.resolve()
+        for program in config.backend_programs
+    }
+    dependencies: set[Path] = {page_source.resolve()}
+    visited: set[tuple[int, str]] = set()
+
+    def visit_value(value: object, active_checked) -> None:
+        if isinstance(value, ast.Call):
+            spec = active_checked.call_specs.get(id(value))
+            if spec is not None:
+                if spec.origin and spec.origin[-1] == config.backend:
+                    source = by_module.get(spec.origin[0])
+                    if source is not None:
+                        dependencies.add(source)
+                if spec.checked is not None:
+                    visit_calculation(spec.checked, spec.symbol)
+        if isinstance(value, ast.Expr) and is_dataclass(value):
+            for descriptor in fields(value):
+                if descriptor.name != "span":
+                    visit_value(getattr(value, descriptor.name), active_checked)
+        elif isinstance(value, ast.NamedArgument):
+            visit_value(value.value, active_checked)
+        elif isinstance(value, (tuple, list)):
+            for item in value:
+                if isinstance(item, tuple):
+                    for nested in item:
+                        visit_value(nested, active_checked)
+                else:
+                    visit_value(item, active_checked)
+
+    def add_effect_modules(active_checked) -> None:
+        effects = [
+            *(output.effect for output in active_checked.effect_outputs),
+            *(listener.effect for listener in active_checked.listeners),
+        ]
+        for effect in effects:
+            identity = effect.identity
+            if len(identity) >= 3 and identity[-1] == config.backend:
+                source = by_module.get(identity[-2])
+                if source is not None:
+                    dependencies.add(source)
+
+    def visit_calculation(active_checked, symbol: str) -> None:
+        key = (id(active_checked), symbol)
+        if key in visited:
+            return
+        visited.add(key)
+        bindings = {item.name: item for item in active_checked.program.bindings}
+        pending = [symbol]
+        reached: set[str] = set()
+        while pending:
+            name = pending.pop()
+            if name in reached or name not in bindings:
+                continue
+            reached.add(name)
+            binding = bindings[name]
+            visit_value(binding.value, active_checked)
+            pending.extend(expression_names(binding.value))
+        if symbol == active_checked.program.goal.name:
+            for declaration in active_checked.program.emits:
+                visit_value(declaration.payload, active_checked)
+            for declaration in active_checked.program.listeners:
+                if declaration.filter is not None:
+                    visit_value(declaration.filter, active_checked)
+        add_effect_modules(active_checked)
+
+    visit_calculation(checked, checked.program.goal.name)
+    return frozenset(dependencies)
+
+
 def _coerce_http_value(value: Any, expected: Type | None) -> Any:
     """Konvertiert nur eindeutige HTTP-Strings anhand des geprüften SIC-Typs."""
     if expected is None:
@@ -220,6 +298,10 @@ class HotSicProgram:
             self._stamp = stamp
             logger.info("[SIC] compiled source=%s", self.source)
 
+    def invalidate(self) -> None:
+        with self._load_lock:
+            self._stamp = None
+
     def execute_result(self, arguments: dict[str, Any]):
         self._load()
         converted = {
@@ -246,14 +328,16 @@ class EffectHub:
 
     def __init__(self) -> None:
         self._views: dict[
-            object, tuple[tuple[EffectSubscription, ...], asyncio.Queue[None]]
+            object, tuple[
+                tuple[EffectSubscription, ...], frozenset[Path], asyncio.Queue[None]
+            ]
         ] = {}
 
     def replace(
         self, token: object, subscriptions: tuple[EffectSubscription, ...],
-        queue: asyncio.Queue[None],
+        sources: frozenset[Path], queue: asyncio.Queue[None],
     ) -> None:
-        self._views[token] = (subscriptions, queue)
+        self._views[token] = (subscriptions, sources, queue)
         logger.debug(
             "[SIC] subscriptions-updated view=%s count=%d",
             hex(id(token)), len(subscriptions),
@@ -272,7 +356,7 @@ class EffectHub:
             len(self._views),
         )
         matched = 0
-        for subscriptions, queue in tuple(self._views.values()):
+        for subscriptions, _, queue in tuple(self._views.values()):
             if any(
                 subscription.matches(message)
                 for subscription in subscriptions for message in messages
@@ -280,6 +364,58 @@ class EffectHub:
                 queue.put_nowait(None)
                 matched += 1
         logger.info("[SIC] effects-matched views=%d", matched)
+
+    def publish_sources(self, changed: frozenset[Path]) -> None:
+        matched = 0
+        for _, sources, queue in tuple(self._views.values()):
+            if sources & changed and queue.empty():
+                queue.put_nowait(None)
+                matched += 1
+        logger.info(
+            "[SIC] sources-changed files=%s matched_views=%d",
+            ",".join(str(path) for path in sorted(changed)), matched,
+        )
+
+
+
+class SourceWatcher:
+    """Kleiner asynchroner Wächter für bereits laufende Entwicklungsserver."""
+
+    def __init__(self, config_path: Path, config: WebConfig, interval: float = 0.2):
+        self.config_path = config_path.resolve()
+        self.config = config
+        self.interval = interval
+        self.snapshot = self._snapshot()
+
+    def _paths(self) -> set[Path]:
+        backend_dir = (self.config.root / self.config.backend).resolve()
+        return {
+            self.config_path,
+            *(path.resolve() for path in self.config.pages),
+            *(path.resolve() for path in backend_dir.rglob("*.sic")),
+        }
+
+    def _snapshot(self) -> dict[Path, tuple[int, int]]:
+        result: dict[Path, tuple[int, int]] = {}
+        for path in self._paths():
+            try:
+                stat = path.stat()
+            except FileNotFoundError:
+                continue
+            result[path] = (stat.st_mtime_ns, stat.st_size)
+        return result
+
+    async def run(self, callback) -> None:
+        while True:
+            await asyncio.sleep(self.interval)
+            current = self._snapshot()
+            changed = frozenset(
+                path for path in set(self.snapshot) | set(current)
+                if self.snapshot.get(path) != current.get(path)
+            )
+            self.snapshot = current
+            if changed:
+                callback(changed)
 
 
 def _browser_runtime(programs: tuple[BackendProgram, ...]) -> str:
@@ -325,6 +461,19 @@ socket.addEventListener("message", event => {{
     console.info("[SIC] View-Aktualisierung empfangen");
     const root = document.getElementById("sic-root");
     if (root) root.innerHTML = message.html;
+    document.getElementById("sic-diagnostic")?.remove();
+    return;
+  }}
+  if (message.type === "diagnostic") {{
+    console.error("[SIC] Compilerfehler", message.detail);
+    let diagnostic = document.getElementById("sic-diagnostic");
+    if (!diagnostic) {{
+      diagnostic = document.createElement("pre");
+      diagnostic.id = "sic-diagnostic";
+      diagnostic.style.cssText = "position:fixed;inset:auto 0 0 0;z-index:9999;margin:0;padding:12px;background:#5b1111;color:white;white-space:pre-wrap";
+      document.body.appendChild(diagnostic);
+    }}
+    diagnostic.textContent = message.detail;
     return;
   }}
   const pending = pendingCalls.get(String(message.id));
@@ -452,6 +601,38 @@ def create_app(config_path: str | Path = "app.sic"):
         for program in config.backend_programs
         if program.symbol is not None
     }
+    source_watcher = SourceWatcher(config_path, config)
+    watcher_task: asyncio.Task | None = None
+
+    def sources_changed(changed: frozenset[Path]) -> None:
+        for name, program in programs.items():
+            if program.source.resolve() in changed:
+                logger.info("[SIC] backend-invalidated calculation=%s", name)
+            # Jede Backend-Schnittstelle kann von einer anderen abhängen; der
+            # nächste Aufruf baut deshalb den gemeinsamen Registry-Stand neu.
+            if any(
+                item.source.resolve() in changed
+                for item in config.backend_programs
+            ):
+                program.invalidate()
+        effect_hub.publish_sources(changed)
+
+    async def start_source_watcher() -> None:
+        nonlocal watcher_task
+        watcher_task = asyncio.create_task(source_watcher.run(sources_changed))
+        logger.info("[SIC] source-watcher started")
+
+    async def stop_source_watcher() -> None:
+        if watcher_task is not None:
+            watcher_task.cancel()
+            try:
+                await watcher_task
+            except asyncio.CancelledError:
+                pass
+        logger.info("[SIC] source-watcher stopped")
+
+    app.router.add_event_handler("startup", start_source_watcher)
+    app.router.add_event_handler("shutdown", stop_source_watcher)
 
     def evaluate_live_page(pathname: str):
         wanted = pathname.lstrip("/") or "index.html"
@@ -472,7 +653,8 @@ def create_app(config_path: str | Path = "app.sic"):
             else:
                 continue
             if output == wanted:
-                return body, result.subscriptions
+                sources = _view_source_dependencies(checked, source_path, config)
+                return body, result.subscriptions, sources
         raise ValueError(f"Unbekannte SIC-Seite: {pathname}")
 
     async def execute_socket_call(websocket, message: dict[str, Any]) -> None:
@@ -571,16 +753,31 @@ def create_app(config_path: str | Path = "app.sic"):
         )
 
         async def refresh() -> None:
-            body, subscriptions = await run_in_threadpool(
-                evaluate_live_page, pathname
-            )
-            effect_hub.replace(token, subscriptions, queue)
+            try:
+                body, subscriptions, sources = await run_in_threadpool(
+                    evaluate_live_page, pathname
+                )
+            except (LangError, OSError, ValueError) as exc:
+                logger.warning(
+                    "[SIC] view-compile-error view=%s page=%s detail=%s",
+                    hex(id(token)), pathname, exc,
+                )
+                await websocket.send_json({
+                    "type": "diagnostic", "detail": str(exc),
+                })
+                return
+            effect_hub.replace(token, subscriptions, sources, queue)
             await websocket.send_json({"type": "replace", "html": body})
             logger.info(
                 "[SIC] view-rendered view=%s page=%s listeners=%d html_bytes=%d",
                 hex(id(token)), pathname, len(subscriptions), len(body.encode("utf-8")),
             )
 
+        initial_sources = frozenset({
+            *(path.resolve() for path in config.pages),
+            *(program.source.resolve() for program in config.backend_programs),
+        })
+        effect_hub.replace(token, (), initial_sources, queue)
         try:
             await refresh()
             while True:

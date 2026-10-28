@@ -1,6 +1,6 @@
 goal view: View::web =
     Column::web([
-            Text::web("hallo todo app nutzer"),
+            Text::web("hallo todo app nutzer um tolle sachen "),
             Input::web(
                 placeholder: "Neue Aufgabe",
                 on_submit: title =>
