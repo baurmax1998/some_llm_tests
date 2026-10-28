@@ -115,9 +115,7 @@ def test_web_project_uses_declared_sources_and_backend_registry(tmp_path: Path):
         goal app: App::web = {
             port: 8000,
             pages: ["frontend/app.sic"],
-            endpoints: [
-                {name: "greeting", method: "GET", path: "/greet", source: "backend/greet.sic"}
-            ]
+            backend: "backend"
         }
         ''',
         encoding="utf-8",
@@ -144,7 +142,6 @@ def test_web_project_uses_declared_sources_and_backend_registry(tmp_path: Path):
         "frontend/app.i",
         "unused.i",
         "web/App.i",
-        "web/Endpoint.i",
         "web/Text.i",
         "web/View.i",
     } <= relative
@@ -155,7 +152,8 @@ def test_web_project_uses_declared_sources_and_backend_registry(tmp_path: Path):
     app_interface = (
         tmp_path / ".out" / "i" / "web" / "App.i"
     ).read_text(encoding="utf-8")
-    assert "import web.Endpoint;" in app_interface
+    assert "String backend;" in app_interface
+    assert "endpoints" not in app_interface
 
     frontend_tree = (
         tmp_path / ".out" / "t" / "frontend" / "app"
@@ -166,4 +164,4 @@ def test_web_project_uses_declared_sources_and_backend_registry(tmp_path: Path):
 
     app_tree = (tmp_path / ".out" / "t" / "app").read_text(encoding="utf-8")
     assert "import web.App" in app_tree
-    assert "import web.Endpoint" in app_tree
+    assert "web.Endpoint" not in app_tree

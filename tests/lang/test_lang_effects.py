@@ -14,7 +14,7 @@ def effect_registry() -> ModuleRegistry:
     return registry
 
 
-def test_typed_effect_is_emitted_and_propagated_from_calculation():
+def test_typed_effect_is_emitted_and_propagated_from_calculation(caplog):
     registry = effect_registry()
     registry.register_source(
         "create", "backend",
@@ -26,8 +26,10 @@ def test_typed_effect_is_emitted_and_propagated_from_calculation():
     checked = compile_program(
         "goal todo: Todo = create::create::backend(id: 42)", registry
     )
-    result = Evaluator(checked, registry).run()
+    with caplog.at_level("INFO", logger="uvicorn.error.sic.runtime"):
+        result = Evaluator(checked, registry).run()
     assert result.value == {"id": 42}
+    assert "effect-emitted effect=Todos::effects::backend" in caplog.text
     assert [(item.output, item.payload) for item in result.effects] == [
         ("todosChanged", 42)
     ]

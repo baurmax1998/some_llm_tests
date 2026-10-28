@@ -1,6 +1,6 @@
 """FastAPI-Host und statischer Compiler für SIC-Webprojekte.
 
-Die Webschicht bleibt bewusst klein: Konfiguration, Seiten und Endpunktlogik
+Die Webschicht bleibt bewusst klein: Konfiguration, Seiten und Backendlogik
 sind SIC-Programme. Python übernimmt nur HTTP, Hot-Reload und das Schreiben
 der erzeugten Browserdateien.
 """
@@ -10,28 +10,27 @@ import asyncio
 from dataclasses import dataclass
 import html
 import json
+import logging
 from pathlib import Path
 import re
 import threading
 from typing import Any
 
-from .lang import Evaluator, LangCalculationError, LangError, compile_program, standard_registry
+from .lang import (
+    Evaluator, LangCalculationError, LangError, compile_program, parse,
+    standard_registry,
+)
 from .lang.effects import EffectMessage, EffectSubscription
 from .lang.types import ListType, MapType, NullableType, Primitive, RecordType, Type, prune
 
 
+logger = logging.getLogger("uvicorn.error.sic")
+
+
 @dataclass(frozen=True)
-class ModuleConfig:
+class BackendProgram:
     module: str
-    package: str
-    source: Path
-
-
-@dataclass(frozen=True)
-class EndpointConfig:
-    name: str
-    method: str
-    path: str
+    symbol: str | None
     source: Path
 
 
@@ -41,9 +40,9 @@ class WebConfig:
     host: str
     port: int
     output: Path
-    modules: tuple[ModuleConfig, ...]
     pages: tuple[Path, ...]
-    endpoints: tuple[EndpointConfig, ...]
+    backend: str
+    backend_programs: tuple[BackendProgram, ...]
     root: Path
 
 
@@ -63,6 +62,31 @@ def _string(record: dict[str, Any], name: str, context: str) -> str:
     return value
 
 
+def _discover_backend(root: Path, package: str) -> tuple[BackendProgram, ...]:
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", package):
+        raise ValueError("app.backend muss ein gültiger SIC-Paketname sein")
+    directory = _inside(root, package, "app.backend")
+    if not directory.is_dir():
+        raise ValueError(f"Backend-Verzeichnis existiert nicht: {directory}")
+    programs: list[BackendProgram] = []
+    symbols: set[str] = set()
+    for source in sorted(directory.rglob("*.sic")):
+        program = parse(source.read_text(encoding="utf-8"))
+        symbol = program.goal.name if program.bindings else None
+        module = symbol or source.stem
+        if symbol is not None and symbol in symbols:
+            raise ValueError(f"Backend-Berechnung {symbol!r} ist mehrfach definiert")
+        if symbol is not None:
+            symbols.add(symbol)
+        programs.append(BackendProgram(module, symbol, source))
+    if not programs:
+        raise ValueError(f"Keine SIC-Dateien im Backend-Verzeichnis {directory}")
+    # Deklarationsmodule müssen vor Berechnungen registriert werden, die ihre
+    # Effekte referenzieren.
+    programs.sort(key=lambda item: (item.symbol is not None, str(item.source)))
+    return tuple(programs)
+
+
 def load_web_config(path: str | Path = "app.sic") -> WebConfig:
     """Wertet die SIC-Konfiguration aus und validiert ihre Web-Metadaten."""
     config_path = Path(path).resolve()
@@ -76,6 +100,12 @@ def load_web_config(path: str | Path = "app.sic") -> WebConfig:
     value = Evaluator(checked, registry).run().value
     if not isinstance(value, dict):
         raise ValueError("Das App-Goal muss einen Record liefern")
+    removed = {"modules", "actions", "endpoints"} & set(value)
+    if removed:
+        name = sorted(removed)[0]
+        raise ValueError(
+            f"app.{name} wird nicht mehr unterstützt; verwende nur backend"
+        )
 
     title = value.get("title", "SIC App")
     host = value.get("host", "127.0.0.1")
@@ -91,76 +121,29 @@ def load_web_config(path: str | Path = "app.sic") -> WebConfig:
         raise ValueError("app.output muss ein nicht leerer String sein")
     output = _inside(root, output_raw, "app.output")
 
-    raw_modules = value.get("modules", [])
     raw_pages = value.get("pages", [])
-    raw_endpoints = value.get("endpoints", [])
-    if not isinstance(raw_modules, list) or not all(isinstance(item, dict) for item in raw_modules):
-        raise ValueError("app.modules muss eine Liste von Records sein")
     if not isinstance(raw_pages, list) or not all(isinstance(item, str) for item in raw_pages):
         raise ValueError("app.pages muss List<String> sein")
-    if not isinstance(raw_endpoints, list) or not all(isinstance(item, dict) for item in raw_endpoints):
-        raise ValueError("app.endpoints muss eine Liste von Records sein")
-
-    modules: list[ModuleConfig] = []
-    module_paths: set[tuple[str, str]] = set()
-    for index, item in enumerate(raw_modules):
-        context = f"app.modules[{index}]"
-        module = _string(item, "module", context)
-        package = _string(item, "package", context)
-        if (module, package) in module_paths:
-            raise ValueError(f"Modul {module}::{package} ist doppelt")
-        module_paths.add((module, package))
-        modules.append(ModuleConfig(
-            module, package,
-            _inside(root, _string(item, "source", context), "module.source"),
-        ))
-
+    backend = value.get("backend")
+    if not isinstance(backend, str) or not backend:
+        raise ValueError("app.backend muss ein nicht leerer Paketname sein")
     pages = tuple(_inside(root, item, "page") for item in raw_pages)
-    endpoints: list[EndpointConfig] = []
-    names: set[str] = set()
-    routes: set[tuple[str, str]] = set()
-    for index, item in enumerate(raw_endpoints):
-        context = f"app.endpoints[{index}]"
-        name = _string(item, "name", context)
-        method = _string(item, "method", context).upper()
-        route = _string(item, "path", context)
-        source_path = _inside(root, _string(item, "source", context), "endpoint.source")
-        if method not in {"GET", "POST", "PUT", "PATCH", "DELETE"}:
-            raise ValueError(f"{context}.method wird nicht unterstützt: {method}")
-        if not route.startswith("/"):
-            raise ValueError(f"{context}.path muss mit / beginnen")
-        if name in names:
-            raise ValueError(f"Endpunktname {name!r} ist doppelt")
-        if (method, route) in routes:
-            raise ValueError(f"Route {method} {route} ist doppelt")
-        names.add(name)
-        routes.add((method, route))
-        endpoints.append(EndpointConfig(name, method, route, source_path))
     return WebConfig(
-        title, host, port, output, tuple(modules), pages, tuple(endpoints), root
+        title, host, port, output, pages, backend,
+        _discover_backend(root, backend), root,
     )
 
 
 def _project_registry(
-    root: Path, modules: tuple[ModuleConfig, ...],
-    endpoints: tuple[EndpointConfig, ...] = (),
+    root: Path, package: str,
+    programs: tuple[BackendProgram, ...] | None = None,
 ):
     registry = standard_registry(root)
-    for module in modules:
+    active = programs if programs is not None else _discover_backend(root, package)
+    for program in active:
         registry.register_source(
-            module.module, module.package,
-            module.source.read_text(encoding="utf-8"),
-        )
-    # Endpunkte sind automatisch als `name::backend` verfügbar. Eine separate
-    # Modulliste nur für Frontend-Aufrufe wäre redundante Konfiguration.
-    registered = {(module.module, module.package) for module in modules}
-    for endpoint in endpoints:
-        key = (endpoint.name, "backend")
-        if key in registered:
-            continue
-        registry.register_source(
-            endpoint.name, "backend",
-            endpoint.source.read_text(encoding="utf-8"),
+            program.module, package,
+            program.source.read_text(encoding="utf-8"),
         )
     return registry
 
@@ -204,12 +187,13 @@ class HotSicProgram:
     """Hält die letzte kompilierte Fassung und lädt Änderungen automatisch."""
 
     def __init__(
-        self, source: Path, root: Path, modules: tuple[ModuleConfig, ...],
-        execution_lock: threading.RLock,
+        self, source: Path, root: Path, package: str,
+        programs: tuple[BackendProgram, ...], execution_lock: threading.RLock,
     ):
         self.source = source
         self.root = root
-        self.modules = modules
+        self.package = package
+        self.programs = programs
         self.execution_lock = execution_lock
         self._load_lock = threading.RLock()
         self._stamp: tuple[int, ...] | None = None
@@ -218,7 +202,7 @@ class HotSicProgram:
         self._load()
 
     def _load(self) -> None:
-        sources = (self.source, *(module.source for module in self.modules))
+        sources = tuple(program.source for program in self.programs)
         stamp = tuple(source.stat().st_mtime_ns for source in sources)
         if stamp == self._stamp and self._checked is not None:
             return
@@ -227,11 +211,14 @@ class HotSicProgram:
             if stamp == self._stamp and self._checked is not None:
                 return
             source = self.source.read_text(encoding="utf-8")
-            registry = _project_registry(self.root, self.modules)
+            registry = _project_registry(
+                self.root, self.package, self.programs
+            )
             checked = compile_program(source, registry)
             self._registry = registry
             self._checked = checked
             self._stamp = stamp
+            logger.info("[SIC] compiled source=%s", self.source)
 
     def execute_result(self, arguments: dict[str, Any]):
         self._load()
@@ -267,23 +254,38 @@ class EffectHub:
         queue: asyncio.Queue[None],
     ) -> None:
         self._views[token] = (subscriptions, queue)
+        logger.debug(
+            "[SIC] subscriptions-updated view=%s count=%d",
+            hex(id(token)), len(subscriptions),
+        )
 
     def remove(self, token: object) -> None:
         self._views.pop(token, None)
 
     def publish(self, messages: tuple[EffectMessage, ...]) -> None:
+        if not messages:
+            return
+        logger.info(
+            "[SIC] effects-publish count=%d effects=%s active_views=%d",
+            len(messages),
+            ",".join("::".join(item.effect.identity) for item in messages),
+            len(self._views),
+        )
+        matched = 0
         for subscriptions, queue in tuple(self._views.values()):
             if any(
                 subscription.matches(message)
                 for subscription in subscriptions for message in messages
             ) and queue.empty():
                 queue.put_nowait(None)
+                matched += 1
+        logger.info("[SIC] effects-matched views=%d", matched)
 
 
-def _browser_runtime(endpoints: tuple[EndpointConfig, ...]) -> str:
+def _browser_runtime(programs: tuple[BackendProgram, ...]) -> str:
     public = {
-        endpoint.name: {"method": endpoint.method, "path": endpoint.path}
-        for endpoint in endpoints
+        program.symbol: {"transport": "websocket"}
+        for program in programs if program.symbol is not None
     }
     encoded = json.dumps(public, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
     return f"""
@@ -298,7 +300,10 @@ const socket = new WebSocket(`${{websocketProtocol}}//${{location.host}}/__sic_w
 const pendingCalls = new Map();
 let callSequence = 0;
 const socketReady = new Promise((resolve, reject) => {{
-  socket.addEventListener("open", resolve, {{once: true}});
+  socket.addEventListener("open", () => {{
+    console.info("[SIC] WebSocket verbunden");
+    resolve();
+  }}, {{once: true}});
   socket.addEventListener("error", () => reject(new Error("WebSocket-Verbindung fehlgeschlagen")), {{once: true}});
 }});
 async function call(name, values = {{}}) {{
@@ -307,12 +312,17 @@ async function call(name, values = {{}}) {{
   const id = String(++callSequence);
   return new Promise((resolve, reject) => {{
     pendingCalls.set(id, {{resolve, reject}});
+    console.info("[SIC] Aktion gesendet", {{
+      id, name, transport: definition(name).transport,
+      method: definition(name).method || "WS"
+    }});
     socket.send(JSON.stringify({{type: "call", id, name, values: {{...values}}}}));
   }});
 }}
 socket.addEventListener("message", event => {{
   const message = JSON.parse(event.data);
   if (message.type === "replace") {{
+    console.info("[SIC] View-Aktualisierung empfangen");
     const root = document.getElementById("sic-root");
     if (root) root.innerHTML = message.html;
     return;
@@ -321,14 +331,17 @@ socket.addEventListener("message", event => {{
   if (!pending) return;
   pendingCalls.delete(String(message.id));
   if (message.type === "result") {{
+    console.info("[SIC] Aktion abgeschlossen", {{id: message.id}});
     pending.resolve(message.result);
   }} else {{
+    console.error("[SIC] Aktion fehlgeschlagen", message);
     const error = new Error(message.detail || message.error || "SIC-Aktion fehlgeschlagen");
     error.response = message;
     pending.reject(error);
   }}
 }});
 socket.addEventListener("close", () => {{
+  console.warn("[SIC] WebSocket getrennt");
   for (const pending of pendingCalls.values()) {{
     pending.reject(new Error("WebSocket-Verbindung wurde geschlossen"));
   }}
@@ -363,7 +376,7 @@ document.addEventListener("click", async event => {{
   show(name, result);
   document.dispatchEvent(new CustomEvent("sic:result", {{detail: {{name, result}}}}));
 }});
-window.sic = {{call, endpoints: definitions}};
+window.sic = {{call, actions: definitions}};
 """.strip()
 
 
@@ -372,9 +385,11 @@ def build_web(config_path: str | Path = "app.sic") -> list[Path]:
     config = load_web_config(config_path)
     config.output.mkdir(parents=True, exist_ok=True)
     generated: list[Path] = []
-    runtime = _browser_runtime(config.endpoints)
+    runtime = _browser_runtime(config.backend_programs)
     for source_path in config.pages:
-        registry = _project_registry(config.root, config.modules, config.endpoints)
+        registry = _project_registry(
+            config.root, config.backend, config.backend_programs
+        )
         checked = compile_program(source_path.read_text(encoding="utf-8"), registry)
         page_type = prune(checked.bindings[checked.program.goal.name])
         is_view = isinstance(page_type, Primitive) and page_type.name == "View::web"
@@ -414,11 +429,11 @@ def build_web(config_path: str | Path = "app.sic") -> list[Path]:
 
 
 def create_app(config_path: str | Path = "app.sic"):
-    """Erzeugt eine FastAPI-App; SIC-Endpunkte werden bei Änderungen neu geladen."""
+    """Erzeugt eine FastAPI-App mit WebSocket-Aufrufen und Hot-Reload."""
     try:
-        from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
+        from fastapi import FastAPI, WebSocket, WebSocketDisconnect
         from fastapi.concurrency import run_in_threadpool
-        from fastapi.responses import FileResponse, JSONResponse
+        from fastapi.responses import FileResponse
     except ImportError as exc:  # pragma: no cover - verständlich bei Minimalinstallation
         raise RuntimeError("FastAPI fehlt; Projektabhängigkeiten erneut installieren") from exc
 
@@ -429,78 +444,21 @@ def create_app(config_path: str | Path = "app.sic"):
     execution_lock = threading.RLock()  # schützt die vorläufige JSON-Dateipersistenz
     effect_hub = EffectHub()
 
-    def response_for(value: Any):
-        if (
-            isinstance(value, dict) and type(value.get("status")) is int
-            and "body" in value
-        ):
-            headers = value.get("headers", {})
-            if not isinstance(headers, dict):
-                headers = {}
-            return JSONResponse(value["body"], status_code=value["status"], headers=headers)
-        return JSONResponse(value)
-
-    def make_handler(program: HotSicProgram):
-        async def handler(request: Request):
-            body: Any = None
-            raw = await request.body()
-            if raw:
-                content_type = request.headers.get("content-type", "")
-                if "application/json" in content_type:
-                    try:
-                        body = json.loads(raw)
-                    except json.JSONDecodeError:
-                        return JSONResponse({"detail": "Ungültiges JSON"}, status_code=400)
-                else:
-                    body = raw.decode("utf-8")
-            query = dict(request.query_params)
-            path_parameters = dict(request.path_params)
-            request_value = {
-                "method": request.method,
-                "path": request.url.path,
-                "query": query,
-                "pathParams": path_parameters,
-                "headers": dict(request.headers),
-                "body": body,
-            }
-            arguments: dict[str, Any] = {"request": request_value, **query, **path_parameters}
-            if isinstance(body, dict):
-                arguments.update(body)
-            try:
-                result = await run_in_threadpool(program.execute_result, arguments)
-                # Meldungen werden erst nach dem abgeschlossenen Aktionsaufruf
-                # verteilt; dadurch sieht keine View einen halben Schreibvorgang.
-                effect_hub.publish(result.effects)
-                return response_for(result.value)
-            except LangCalculationError as exc:
-                effect_hub.publish(getattr(exc, "effects", ()))
-                detail = exc.payload if exc.payload is not None else exc.name
-                return JSONResponse({"error": exc.name, "detail": detail}, status_code=422)
-            except LangError as exc:
-                effect_hub.publish(getattr(exc, "effects", ()))
-                return JSONResponse({"detail": str(exc)}, status_code=422)
-            except (OSError, ValueError) as exc:
-                return JSONResponse({"detail": str(exc)}, status_code=500)
-        # ``Request`` wird lokal importiert; FastAPI benötigt hier das echte
-        # Objekt statt der durch ``annotations`` verzögerten Zeichenkette.
-        handler.__annotations__["request"] = Request
-        return handler
-
-    programs: dict[str, HotSicProgram] = {}
-    endpoints_by_name = {endpoint.name: endpoint for endpoint in config.endpoints}
-    for endpoint in config.endpoints:
-        program = HotSicProgram(
-            endpoint.source, config.root, config.modules, execution_lock
+    programs: dict[str, HotSicProgram] = {
+        program.symbol: HotSicProgram(
+            program.source, config.root, config.backend,
+            config.backend_programs, execution_lock,
         )
-        programs[endpoint.name] = program
-        app.add_api_route(
-            endpoint.path, make_handler(program), methods=[endpoint.method], name=endpoint.name
-        )
+        for program in config.backend_programs
+        if program.symbol is not None
+    }
 
     def evaluate_live_page(pathname: str):
         wanted = pathname.lstrip("/") or "index.html"
         for source_path in config.pages:
-            registry = _project_registry(config.root, config.modules, config.endpoints)
+            registry = _project_registry(
+                config.root, config.backend, config.backend_programs
+            )
             checked = compile_program(source_path.read_text(encoding="utf-8"), registry)
             with execution_lock:
                 result = Evaluator(checked, registry).run()
@@ -534,31 +492,17 @@ def create_app(config_path: str | Path = "app.sic"):
             })
             return
 
-        endpoint = endpoints_by_name[name]
-        path = endpoint.path
-        path_parameters: dict[str, Any] = {}
-        for parameter in re.findall(r"\{([^}]+)\}", endpoint.path):
-            if parameter not in values:
-                await websocket.send_json({
-                    "type": "error", "id": call_id,
-                    "detail": f"Fehlender Pfadwert: {parameter}",
-                })
-                return
-            path_parameters[parameter] = values[parameter]
-            path = path.replace("{" + parameter + "}", str(values[parameter]))
-        remaining = {
-            key: value for key, value in values.items()
-            if key not in path_parameters
-        }
-        query = remaining if endpoint.method == "GET" else {}
-        body: Any = None if endpoint.method == "GET" else remaining
+        logger.info(
+            "[SIC] websocket-action start id=%s name=%s",
+            call_id, name,
+        )
         request_value = {
-            "method": endpoint.method,
-            "path": path,
-            "query": query,
-            "pathParams": path_parameters,
+            "method": "WS",
+            "path": f"/__sic_action/{name}",
+            "query": {},
+            "pathParams": {},
             "headers": dict(websocket.headers),
-            "body": body,
+            "body": values,
         }
         arguments: dict[str, Any] = {
             "request": request_value, **values,
@@ -583,8 +527,16 @@ def create_app(config_path: str | Path = "app.sic"):
             await websocket.send_json({
                 "type": "result", "id": call_id, "result": value,
             })
+            logger.info(
+                "[SIC] websocket-action finish id=%s name=%s effects=%d",
+                call_id, name, len(result.effects),
+            )
         except LangCalculationError as exc:
             effect_hub.publish(getattr(exc, "effects", ()))
+            logger.warning(
+                "[SIC] websocket-action calculation-error id=%s name=%s error=%s",
+                call_id, name, exc.name,
+            )
             detail = exc.payload if exc.payload is not None else exc.name
             await websocket.send_json({
                 "type": "error", "id": call_id,
@@ -592,10 +544,18 @@ def create_app(config_path: str | Path = "app.sic"):
             })
         except LangError as exc:
             effect_hub.publish(getattr(exc, "effects", ()))
+            logger.warning(
+                "[SIC] websocket-action language-error id=%s name=%s detail=%s",
+                call_id, name, exc,
+            )
             await websocket.send_json({
                 "type": "error", "id": call_id, "detail": str(exc),
             })
         except (OSError, ValueError) as exc:
+            logger.exception(
+                "[SIC] websocket-action runtime-error id=%s name=%s",
+                call_id, name,
+            )
             await websocket.send_json({
                 "type": "error", "id": call_id, "detail": str(exc),
             })
@@ -605,6 +565,10 @@ def create_app(config_path: str | Path = "app.sic"):
         token = object()
         queue: asyncio.Queue[None] = asyncio.Queue(maxsize=1)
         pathname = websocket.query_params.get("page", "/")
+        logger.info(
+            "[SIC] websocket-connected view=%s page=%s client=%s",
+            hex(id(token)), pathname, websocket.client,
+        )
 
         async def refresh() -> None:
             body, subscriptions = await run_in_threadpool(
@@ -612,6 +576,10 @@ def create_app(config_path: str | Path = "app.sic"):
             )
             effect_hub.replace(token, subscriptions, queue)
             await websocket.send_json({"type": "replace", "html": body})
+            logger.info(
+                "[SIC] view-rendered view=%s page=%s listeners=%d html_bytes=%d",
+                hex(id(token)), pathname, len(subscriptions), len(body.encode("utf-8")),
+            )
 
         try:
             await refresh()
@@ -656,6 +624,10 @@ def create_app(config_path: str | Path = "app.sic"):
             pass
         finally:
             effect_hub.remove(token)
+            logger.info(
+                "[SIC] websocket-disconnected view=%s page=%s",
+                hex(id(token)), pathname,
+            )
 
     # FastAPI wertet wegen ``from __future__ import annotations`` sonst den
     # lokal importierten WebSocket-Typ nicht auf.
@@ -673,14 +645,27 @@ def create_app(config_path: str | Path = "app.sic"):
     return app
 
 
-def serve_web(config_path: str | Path = "app.sic", *, reload: bool = False) -> None:
-    """Startet den Webserver. SIC-Endpunkte benötigen keinen Prozess-Restart."""
+def serve_web(
+    config_path: str | Path = "app.sic", *, reload: bool = False,
+    log_level: str = "info",
+) -> None:
+    """Startet den Webserver. SIC-Backends benötigen keinen Prozess-Restart."""
     import uvicorn
 
     config_path = Path(config_path).resolve()
     config = load_web_config(config_path)
+    numeric_level = getattr(logging, log_level.upper())
+    logging.basicConfig(
+        level=numeric_level,
+        format="%(levelname)s %(name)s %(message)s",
+    )
+    logger.setLevel(numeric_level)
+    logging.getLogger("uvicorn.error.sic.runtime").setLevel(numeric_level)
     if reload:
         # Uvicorns Prozess-Reload benötigt einen Importstring; SIC-Hot-Reload ist
         # ohnehin aktiv, daher wird diese Option nur als Hinweis behandelt.
-        print("Hinweis: SIC-Endpunkte werden bereits pro Anfrage auf Änderungen geprüft.")
-    uvicorn.run(create_app(config_path), host=config.host, port=config.port)
+        print("Hinweis: SIC-Backends werden bereits vor jedem Aufruf neu geprüft.")
+    uvicorn.run(
+        create_app(config_path), host=config.host, port=config.port,
+        log_level=log_level,
+    )

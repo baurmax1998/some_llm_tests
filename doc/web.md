@@ -1,7 +1,7 @@
 # SIC Web (experimentell)
 
 Die Webschicht ist absichtlich ein dünner FastAPI-Host. Konfiguration, Seiten
-und Endpunktlogik bleiben SIC-Programme. Ein vollständiges Beispiel liegt in
+und Backendlogik bleiben SIC-Programme. Ein vollständiges Beispiel liegt in
 `examples/todo`.
 
 ## Start
@@ -15,28 +15,45 @@ sic serve examples/todo/app.sic
 JavaScript und dem SIC-Browser-Client. `serve` baut die Seiten ebenfalls und
 startet FastAPI mit Host und Port aus der SIC-Konfiguration.
 
+Für ausführliche Laufzeitdiagnose kann der Server mit Debug-Logs gestartet
+werden:
+
+```bash
+sic serve examples/todo/app.sic --log-level debug
+```
+
+Auf Stufe `info` erscheinen WebSocket-Verbindungen, Aktionen,
+Effektverteilung, Treffer und View-Neuberechnungen. `debug` ergänzt einzelne
+Berechnungen, Cache-Treffer, Overrides und Listener. Die Browserkonsole zeigt
+zusätzlich gesendete Aktionen, Ergebnisse und View-Aktualisierungen.
+Effekt-Payloads erscheinen erst auf Stufe `debug` und können sensible Daten
+enthalten.
+
 ## Konfiguration
 
 `app.sic` liefert den Standardbibliothekstyp `App::web`. Erforderlich sind nur
-Port, Seiten und Endpunkte:
+Port, Seiten und der Name des Backend-Pakets:
 
 ```sic
 goal app: App::web = {
     port: 8000,
     pages: ["frontend/app.sic"],
-    endpoints: [
-        {name: "listTodos", method: "GET", path: "/api/todos", source: "backend/list_todos.sic"}
-    ]
+    backend: "backend"
 }
 ```
 
-Alle Pfade sind relativ zur Konfiguration und dürfen deren Projektverzeichnis
-nicht verlassen. Titel (`"SIC App"`), Host (`"127.0.0.1"`) und Ausgabeordner
-(`.out`) besitzen Defaults. Jeder Endpunkt wird automatisch unter
-`name::backend` registriert; eine zusätzliche `modules`-Liste ist dafür nicht
-nötig. Änderungen an Konfiguration oder Routen benötigen aktuell einen
-Neustart. Endpunktprogramme werden anhand ihres Änderungszeitpunkts vor einer
-Anfrage automatisch neu kompiliert.
+`backend: "backend"` bezeichnet zugleich das Verzeichnis `backend/` relativ
+zur Konfiguration und den SIC-Paketnamen. Alle `.sic`-Dateien darin werden
+automatisch entdeckt. Das Goal einer Datei bestimmt den Modulnamen, sodass
+beispielsweise `goal createTodo` als `createTodo::backend` verfügbar wird. Eine
+reine Effektdatei wie `effects.sic` wird als Modul `effects` registriert und
+stellt dadurch etwa `Todos::effects::backend` bereit.
+
+`actions`, `endpoints` und `modules` werden nicht mehr in `app.sic` registriert.
+Alle Backend-Goals sind über die View-WebSocket-Verbindung aufrufbar. Titel
+(`"SIC App"`), Host (`"127.0.0.1"`) und Ausgabeordner (`.out`) besitzen
+Defaults. Backendprogramme werden anhand ihres Änderungszeitpunkts vor einem
+Aufruf automatisch neu kompiliert.
 
 ## Komponenten
 
@@ -90,11 +107,10 @@ goal page: Page::web = {
 ```
 
 Im Browser steht `sic.call(name, daten)` zur Verfügung. Der Aufruf wird über
-die WebSocket-Verbindung der View übertragen; das gilt auch für `POST`, `PUT`,
-`PATCH` und `DELETE`. Pfadparameter wie `{id}` werden serverseitig aus `daten`
-eingesetzt. Die deklarierte HTTP-Methode und der aufgelöste Pfad stehen dem
-SIC-Goal weiterhin über `request` zur Verfügung. Die konfigurierten HTTP-Routen
-bleiben für externe Clients und direkte API-Aufrufe parallel erreichbar.
+die WebSocket-Verbindung der View übertragen. `request.method` enthält dabei
+`"WS"`, `request.path` den internen Aktionspfad
+`/__sic_action/<goal>`. HTTP-Methoden und öffentliche Routen sind nicht
+Bestandteil dieser App-Konfiguration.
 
 Zusätzlich unterstützt der Klebecode:
 
@@ -145,17 +161,17 @@ Aktionen als auch reaktive Aktualisierungen. Passende Effektmeldungen markieren
 die View als veraltet; die Runtime wertet sie neu aus und ersetzt den
 View-Wurzelknoten, einschließlich aktualisierter Event-Bindungen.
 
-## Endpunkte
+## Backend-Aufrufe
 
-Freie Namen eines Endpunktgoals werden aus JSON-Body, Query- und
-Pfadparametern versorgt:
+Freie Namen eines Backend-Goals werden aus den WebSocket-Aktionswerten
+versorgt:
 
 ```sic
 goal response: String = "Hallo " + (name: String)
 ```
 
 Zusätzlich ist `request` mit den Feldern `method`, `path`, `query`,
-`pathParams`, `headers` und `body` verfügbar. HTTP-Strings werden anhand der
+`pathParams`, `headers` und `body` verfügbar. Formularstrings werden anhand der
 statisch ermittelten SIC-Eingabetypen nach `Int`, `Float` oder `Bool`
 konvertiert.
 
@@ -166,8 +182,9 @@ Status und Body festlegen:
 goal response = {status: 201, body: {ok: true}}
 ```
 
-`err` wird vorläufig zu HTTP 422. Dateioperationen laufen unter einem
-prozessweiten Lock, damit die JSON-Demo nicht durch parallele Requests
-beschädigt wird. Lesezugriffe abonnieren automatisch den technischen
+`err` wird als typisierte WebSocket-Fehlermeldung zurückgegeben.
+Dateioperationen laufen unter einem prozessweiten Lock, damit die JSON-Demo
+nicht durch parallele Aufrufe beschädigt wird. Lesezugriffe abonnieren
+automatisch den technischen
 `FileChanged::files::std`-Effekt, Schreibzugriffe lösen ihn aus. Diese
 prozesslokale Effektverteilung ist noch kein Transaktionssystem.

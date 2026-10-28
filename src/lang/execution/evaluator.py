@@ -1,6 +1,7 @@
 """Bedarfsgesteuerte Auswertung geprüfter SIC-Programme."""
 from __future__ import annotations
 from functools import reduce
+import logging
 from typing import Any, Callable
 from .. import ast
 from ..checker import CheckedProgram
@@ -9,6 +10,9 @@ from ..errors import LangCalculationError, LangRuntimeError
 from ..registry import ExternalFunction, ModuleRegistry
 from .models import ExecutionResult
 from .validation import validate_runtime_value
+
+
+logger = logging.getLogger("uvicorn.error.sic.runtime")
 
 
 class Evaluator:
@@ -44,11 +48,13 @@ class Evaluator:
 
     def resolve(self, name: str) -> Any:
         if name in self.overrides:
+            logger.debug("[SIC] override calculation=%s", name)
             expected = self.checked.bindings.get(name, self.checked.inputs.get(name))
             if expected is not None:
                 validate_runtime_value(self.overrides[name], expected, name)
             return self.overrides[name]
         if name in self.values:
+            logger.debug("[SIC] cache-hit calculation=%s", name)
             return self.values[name]
         if name in self.active:
             raise LangRuntimeError(f"Unzulässiger Abhängigkeitszyklus bei {name!r}")
@@ -57,12 +63,17 @@ class Evaluator:
                 raise LangRuntimeError(f"Erforderliche Eingabe {name!r} wurde nicht übergeben")
             raise LangRuntimeError(f"Name {name!r} besitzt keine Definition")
         self.active.add(name)
+        logger.debug(
+            "[SIC] calculate-start calculation=%s origin=%s",
+            name, "::".join(self.identity_origin) or "local",
+        )
         try:
             value = self.evaluate(self.definitions[name], {})
             validate_runtime_value(value, self.checked.bindings[name], name)
             self.values[name] = value
             if name == self.checked.program.goal.name:
                 self.finalize_goal()
+            logger.debug("[SIC] calculate-finish calculation=%s", name)
             return value
         finally:
             self.active.remove(name)
@@ -216,12 +227,24 @@ class Evaluator:
                     self.subscriptions.append(EffectSubscription(
                         listener.effect, payload, True, True
                     ))
+                    logger.debug(
+                        "[SIC] listener automatic effect=%s filter=%r",
+                        "::".join(listener.effect.identity), payload,
+                    )
                 for output in external.effect_outputs:
                     payload = arguments[output.payload_parameter]
                     if output.normalize is not None:
                         payload = output.normalize(payload)
                     validate_runtime_value(payload, output.effect.payload, output.name)
                     self.messages.append(EffectMessage(output.effect, payload, output.name))
+                    logger.info(
+                        "[SIC] effect-emitted effect=%s output=%s",
+                        "::".join(output.effect.identity), output.name,
+                    )
+                    logger.debug(
+                        "[SIC] effect-payload output=%s payload=%r",
+                        output.name, payload,
+                    )
                 return result
             spec = self.checked.call_specs.get(id(expression))
             if spec is not None:
@@ -279,16 +302,31 @@ class Evaluator:
             payload = self.evaluate(declaration.payload, {})
             validate_runtime_value(payload, output.effect.payload, output.name)
             self.messages.append(EffectMessage(output.effect, payload, output.name))
+            logger.info(
+                "[SIC] effect-emitted effect=%s output=%s",
+                "::".join(output.effect.identity), output.name,
+            )
+            logger.debug(
+                "[SIC] effect-payload output=%s payload=%r", output.name, payload,
+            )
         for checked_listener in self.checked.listeners:
             declaration = checked_listener.declaration
             if declaration.filter is None:
                 self.subscriptions.append(EffectSubscription(checked_listener.effect))
+                logger.debug(
+                    "[SIC] listener explicit effect=%s",
+                    "::".join(checked_listener.effect.identity),
+                )
             else:
                 payload = self.evaluate(declaration.filter, {})
                 validate_runtime_value(payload, checked_listener.effect.payload, "on")
                 self.subscriptions.append(EffectSubscription(
                     checked_listener.effect, payload, True
                 ))
+                logger.debug(
+                    "[SIC] listener explicit effect=%s filter=%r",
+                    "::".join(checked_listener.effect.identity), payload,
+                )
 
     def outgoing_messages(self) -> list[EffectMessage]:
         return [

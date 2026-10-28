@@ -25,12 +25,13 @@ def _project_sources(config_path: Path) -> tuple[Path, list[Path], ModuleRegistr
     from ...web import _project_registry, load_web_config
 
     config = load_web_config(config_path)
-    registry = _project_registry(config.root, config.modules, config.endpoints)
+    registry = _project_registry(
+        config.root, config.backend, config.backend_programs
+    )
     declared = [
         config_path.resolve(),
-        *(module.source for module in config.modules),
         *config.pages,
-        *(endpoint.source for endpoint in config.endpoints),
+        *(program.source for program in config.backend_programs),
     ]
     discovered = sorted(
         item.resolve() for item in config.root.rglob("*.sic")

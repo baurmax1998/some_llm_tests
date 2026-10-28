@@ -72,16 +72,10 @@ def standard_registry(root: str | Path | None = None) -> ModuleRegistry:
         return opening + "".join(children) + f"</{tag}>"
 
     view_type = Primitive("View::web")
-    endpoint_type = RecordType("Endpoint::web", {
-        "name": STRING,
-        "method": STRING,
-        "path": STRING,
-        "source": STRING,
-    }, closed=True)
     app_type = RecordType("App::web", {
         "port": INT,
         "pages": ListType(STRING),
-        "endpoints": ListType(endpoint_type),
+        "backend": STRING,
     }, closed=True)
 
     def column(children: list[str]) -> str:
@@ -191,7 +185,6 @@ def standard_registry(root: str | Path | None = None) -> ModuleRegistry:
     html_type = Primitive("Html::web")
     registry.register_type("Html", ("web",), html_type)
     registry.register_type("View", ("web",), view_type)
-    registry.register_type("Endpoint", ("web",), endpoint_type)
     registry.register_type("App", ("web",), app_type)
     registry.register_type(
         "Page", ("web",),

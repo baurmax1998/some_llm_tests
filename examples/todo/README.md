@@ -41,10 +41,13 @@ backend/
 ```
 
 Das typisierte `App::web` in `app.sic` enthält nur `port`, `pages` und
-`endpoints`; Host, Titel, Ausgabeordner und Backend-Registrierung entstehen
-automatisch. `frontend/app.sic` liefert direkt `View::web`. `todos` und `nextId`
-sind normale `let`-Abhängigkeiten. Die Todo-Zeilen entstehen mit `map`; Event-
-Lambdas rufen unmittelbar die Goals aus dem Paket `backend` auf. Die Aktionen
+`backend: "backend"`. Alle SIC-Dateien unter `backend/` werden automatisch als
+Backend-Paket entdeckt; `actions`, `modules` und HTTP-Endpunkte müssen nicht
+registriert werden. Host, Titel und Ausgabeordner entstehen automatisch.
+`frontend/app.sic` liefert direkt `View::web`; dort ist nur die sichtbare
+Todo-Liste eine Datenabhängigkeit. Die nächste ID wird beim Erstellen im Backend
+aus dem aktuellen Datenbestand bestimmt. Die Todo-Zeilen entstehen mit `map`;
+Event-Lambdas rufen unmittelbar die Goals aus dem Paket `backend` auf. Die Aktionen
 melden `Todos::effects::backend`; `listTodos` hört auf diesen fachlichen Effekt.
 Aktive Views werden daraufhin über WebSocket neu ausgewertet, ohne Seiten-Reload.
 

@@ -2,6 +2,7 @@
 from __future__ import annotations
 import argparse
 import json
+import logging
 from pathlib import Path
 import sys
 from typing import Any
@@ -48,6 +49,11 @@ def command_check(args: argparse.Namespace) -> int:
 
 
 def command_run(args: argparse.Namespace) -> int:
+    logging.basicConfig(
+        level=getattr(logging, args.log_level.upper()),
+        format="%(levelname)s %(name)s %(message)s",
+    )
+    logging.getLogger("uvicorn.error.sic").setLevel(args.log_level.upper())
     file, source = _source(args.file)
     try:
         result = run_program(source, standard_registry(file.parent))
@@ -110,7 +116,7 @@ def command_describe(args: argparse.Namespace) -> int:
 def command_serve(args: argparse.Namespace) -> int:
     from .web import serve_web
 
-    serve_web(args.config, reload=args.reload)
+    serve_web(args.config, reload=args.reload, log_level=args.log_level)
     return 0
 
 
@@ -149,6 +155,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     run_parser = commands.add_parser("run", help="Programm ausführen")
     run_parser.add_argument("file")
+    run_parser.add_argument(
+        "--log-level", choices=("debug", "info", "warning", "error"),
+        default="warning",
+    )
     run_parser.set_defaults(handler=command_run)
 
     generate_parser = commands.add_parser("generate", help="Programm mit lokalem LLM erzeugen")
@@ -176,6 +186,10 @@ def build_parser() -> argparse.ArgumentParser:
     serve_parser = commands.add_parser("serve", help="SIC-Webprojekt mit FastAPI starten")
     serve_parser.add_argument("config", nargs="?", default="app.sic")
     serve_parser.add_argument("--reload", action="store_true")
+    serve_parser.add_argument(
+        "--log-level", choices=("debug", "info", "warning", "error"),
+        default="info",
+    )
     serve_parser.set_defaults(handler=command_serve)
 
     repl_parser = commands.add_parser("repl", help="Interaktive Sitzung starten")

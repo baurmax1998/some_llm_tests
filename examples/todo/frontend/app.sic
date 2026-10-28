@@ -1,12 +1,10 @@
 goal view: View::web =
     Column::web([
+            Text::web("hallo todo app nutzer"),
             Input::web(
                 placeholder: "Neue Aufgabe",
                 on_submit: title =>
-                    createTodo::backend(
-                        id: nextId,
-                        title: title
-                    )
+                    createTodo::backend(title: title)
             ),
 
             ListView::web(
@@ -31,10 +29,3 @@ goal view: View::web =
         ])
 
 let todos = listTodos::backend()
-
-let nextId =
-    (todos
-        .map(todo => todo.id)
-        .sort()
-        .last() ?? 0
-    ) + 1
